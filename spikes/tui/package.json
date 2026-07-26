@@ -1,0 +1,14 @@
+{
+  "name": "@pandamate/spike-tui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-ffi src/index.ts",
+    "check": "tsc -p tsconfig.json",
+    "test": "node --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@opentui/core": "0.4.5"
+  }
+}

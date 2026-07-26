@@ -1,0 +1,446 @@
+import {
+  readFileSync,
+  unlinkSync,
+} from "node:fs";
+import { join } from "node:path";
+
+import type { PandamateConfig } from "@pandamate/config";
+import type { Project } from "@pandamate/domain";
+import { firstMateWorkspaceEvidence } from "@pandamate/firstmate-kit";
+import {
+  discoverTmuxSessions,
+  targetForProject,
+  type DiscoveredTmuxSession,
+  type TmuxClient,
+} from "@pandamate/runtime-tmux";
+import type { PandamateStore } from "@pandamate/storage";
+
+interface Heartbeat {
+  readonly protocolVersion: 1;
+  readonly projectSlug: string;
+  readonly pid: number;
+  readonly state: "running" | "waiting";
+  readonly sequence: number;
+  readonly timestamp: string;
+}
+
+export interface SupervisorLog {
+  (
+    level: "info" | "error",
+    event: string,
+    fields?: Readonly<Record<string, unknown>>,
+  ): void;
+}
+
+type SupervisorTmux = Pick<
+  TmuxClient,
+  "run" | "createDetachedInDirectory" | "killSession" | "renameSession"
+>;
+
+export function firstMateProfileForProject(
+  project: Pick<Project, "kind">,
+): {
+  readonly name: "FirstMateArc" | "FirstMateGit" | "DocResearch";
+  readonly instructions: string;
+} {
+  switch (project.kind) {
+    case "arc":
+      return {
+        name: "FirstMateArc",
+        instructions:
+          "This is an Arcadia workspace. Follow repository AGENTS.md rules, use arc for VCS, and use Arcadia-native code search and ya tooling.",
+      };
+    case "git":
+      return {
+        name: "FirstMateGit",
+        instructions:
+          "This is a Git workspace. Inspect its repository instructions before changing files and preserve unrelated user changes.",
+      };
+    case "docs":
+      return {
+        name: "DocResearch",
+        instructions:
+          "This is a research and document workspace. Treat source attribution, document fidelity, and durable written results as primary outputs.",
+      };
+  }
+}
+
+function removeIfPresent(path: string): void {
+  try {
+    unlinkSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+}
+
+function parseHeartbeat(path: string, projectSlug: string): Heartbeat | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch (error) {
+    if (
+      (error as NodeJS.ErrnoException).code === "ENOENT" ||
+      error instanceof SyntaxError
+    ) {
+      return null;
+    }
+    throw error;
+  }
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const heartbeat = value as Record<string, unknown>;
+  if (
+    heartbeat.protocolVersion !== 1 ||
+    heartbeat.projectSlug !== projectSlug ||
+    typeof heartbeat.pid !== "number" ||
+    !Number.isSafeInteger(heartbeat.pid) ||
+    heartbeat.pid <= 0 ||
+    (heartbeat.state !== "running" && heartbeat.state !== "waiting") ||
+    typeof heartbeat.sequence !== "number" ||
+    !Number.isSafeInteger(heartbeat.sequence) ||
+    heartbeat.sequence < 1 ||
+    typeof heartbeat.timestamp !== "string" ||
+    !Number.isFinite(Date.parse(heartbeat.timestamp))
+  ) {
+    return null;
+  }
+  return heartbeat as unknown as Heartbeat;
+}
+
+export class FirstMateSupervisor {
+  readonly #config: PandamateConfig;
+  readonly #store: Pick<
+    PandamateStore,
+    "listProjects" | "recordProjectRuntime"
+  >;
+  readonly #tmux: SupervisorTmux;
+  readonly #log: SupervisorLog;
+  readonly #now: () => Date;
+  #timer: ReturnType<typeof setInterval> | null = null;
+  #reconciling = false;
+
+  constructor(options: {
+    readonly config: PandamateConfig;
+    readonly store: Pick<
+      PandamateStore,
+      "listProjects" | "recordProjectRuntime"
+    >;
+    readonly tmux: SupervisorTmux;
+    readonly log?: SupervisorLog;
+    readonly now?: () => Date;
+  }) {
+    this.#config = options.config;
+    this.#store = options.store;
+    this.#tmux = options.tmux;
+    this.#log = options.log ?? (() => {});
+    this.#now = options.now ?? (() => new Date());
+  }
+
+  heartbeatPath(slug: string): string {
+    return join(this.#config.heartbeatDirectory, `${slug}.json`);
+  }
+
+  controlPath(slug: string): string {
+    return join(this.#config.heartbeatDirectory, `${slug}.control`);
+  }
+
+  launchCommand(project: Project): readonly string[] {
+    if (this.#config.firstMateAdapter === "fake") {
+      if (!this.#config.fakeFirstMateEntry) {
+        throw new Error("Fake FirstMate entry is not configured");
+      }
+      return [
+        process.execPath,
+        this.#config.fakeFirstMateEntry,
+        "--project",
+        project.slug,
+        "--heartbeat",
+        this.heartbeatPath(project.slug),
+        "--control",
+        this.controlPath(project.slug),
+        "--interval-ms",
+        "250",
+        "--socket",
+        this.#config.socketPath,
+      ];
+    }
+    const profile = firstMateProfileForProject(project);
+    const hookEntry = new URL(
+      "../../../packages/firstmate-kit/src/hook-cli.ts",
+      import.meta.url,
+    ).pathname;
+    const shellQuote = (value: string): string =>
+      `'${value.replaceAll("'", "'\"'\"'")}'`;
+    const hookCommand = `${shellQuote(process.execPath)} ${shellQuote(hookEntry)}`;
+    const hookSettings = JSON.stringify({
+      hooks: Object.fromEntries(
+        [
+          "SessionStart",
+          "PostToolUse",
+          "Notification",
+          "Stop",
+          "SessionEnd",
+        ].map((eventName) => [
+          eventName,
+          [
+            {
+              matcher: "",
+              hooks: [
+                {
+                  type: "command",
+                  command: hookCommand,
+                  timeout: 2,
+                },
+              ],
+            },
+          ],
+        ]),
+      ),
+    });
+    const prompt = `FIRSTMATE_OP: v1
+You are running as ${profile.name}, the main FirstMate for project "${project.title}" (${project.slug}).
+Your workspace and working directory are ${project.workspace}.
+Your runtime is the Claude Code executable at ${this.#config.claudeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. FirstMate is this long-running main Claude Code process and role; it is not a second hidden executable.
+${profile.instructions}
+Own this project's detailed work and durable project state. Read the repository instructions and existing project context before acting. Supervise any workers you create, keep their work isolated, report bounded status and checkpoints through the Pandamate integration when available, and remain available between assignments. Never operate on unrelated projects or pandamate:* control-plane sessions.`;
+    return [
+      "/usr/bin/env",
+      `PANDAMATE_PROJECT_SLUG=${project.slug}`,
+      `PANDAMATE_SOCKET_PATH=${this.#config.socketPath}`,
+      `PANDAMATE_HOOK_SPOOL_DIR=${this.#config.hookSpoolDirectory}`,
+      this.#config.claudeExecutable,
+      "--settings",
+      hookSettings,
+      "--permission-mode",
+      "auto",
+      "--effort",
+      "high",
+      "--name",
+      `${profile.name} ${project.slug}`,
+      prompt,
+    ];
+  }
+
+  start(): void {
+    if (this.#timer) {
+      return;
+    }
+    this.reconcileNow();
+    this.#timer = setInterval(
+      () => this.reconcileNow(),
+      this.#config.reconcileIntervalMs,
+    );
+    this.#timer.unref();
+  }
+
+  stop(): void {
+    if (this.#timer) {
+      clearInterval(this.#timer);
+      this.#timer = null;
+    }
+  }
+
+  reconcileNow(): void {
+    if (this.#reconciling) {
+      return;
+    }
+    this.#reconciling = true;
+    try {
+      const sessions = discoverTmuxSessions(this.#tmux);
+      for (const project of this.#store.listProjects()) {
+        try {
+          this.#reconcileProject(project, sessions);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          this.#log("error", "supervisor.project.failed", {
+            slug: project.slug,
+            message,
+          });
+          this.#store.recordProjectRuntime(project.slug, {
+            actualState: "failed",
+            tmuxTarget: null,
+            tmuxSessionName:
+              project.tmuxSessionName ?? targetForProject(project.slug),
+            currentSummary: `Runtime reconciliation failed: ${message}`.slice(
+              0,
+              240,
+            ),
+            lastHeartbeatAt: project.lastHeartbeatAt,
+          });
+        }
+      }
+    } catch (error) {
+      this.#log("error", "supervisor.failed", {
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      this.#reconciling = false;
+    }
+  }
+
+  #runtimeFor(
+    project: Project,
+    sessions: readonly DiscoveredTmuxSession[],
+  ): DiscoveredTmuxSession | undefined {
+    return sessions.find(
+      (session) =>
+        session.id === project.tmuxTarget ||
+        session.name === project.tmuxSessionName,
+    );
+  }
+
+  #reconcileProject(
+    project: Project,
+    sessions: readonly DiscoveredTmuxSession[],
+  ): void {
+    let runtime = this.#runtimeFor(project, sessions);
+    if (project.desiredState === "stopped") {
+      if (!runtime && project.actualState === "registered") {
+        return;
+      }
+      if (runtime) {
+        this.#tmux.killSession(runtime.name);
+        this.#log("info", "supervisor.session.stopped", {
+          slug: project.slug,
+          sessionName: runtime.name,
+        });
+      }
+      this.#store.recordProjectRuntime(project.slug, {
+        actualState: "stopped",
+        tmuxTarget: null,
+        tmuxSessionName:
+          project.tmuxSessionName ?? runtime?.name ?? targetForProject(project.slug),
+        currentSummary: "Stopped; retained in Fleet for a future start",
+        lastHeartbeatAt: project.lastHeartbeatAt,
+      });
+      return;
+    }
+
+    if (!runtime) {
+      const sessionName = targetForProject(project.slug);
+      removeIfPresent(this.heartbeatPath(project.slug));
+      removeIfPresent(this.controlPath(project.slug));
+      this.#store.recordProjectRuntime(project.slug, {
+        actualState:
+          project.actualState === "starting" ? "starting" : "recovering",
+        tmuxTarget: null,
+        tmuxSessionName: sessionName,
+        currentSummary:
+          project.actualState === "starting"
+            ? "Launching FirstMate runtime"
+            : "Recovering missing FirstMate runtime",
+        lastHeartbeatAt: project.lastHeartbeatAt,
+      });
+      this.#tmux.createDetachedInDirectory(
+        sessionName,
+        project.workspace,
+        this.launchCommand(project),
+      );
+      this.#log("info", "supervisor.session.started", {
+        slug: project.slug,
+        sessionName,
+        adapter: this.#config.firstMateAdapter,
+      });
+      return;
+    }
+
+    const legacySessionName = `pandamate:${project.slug}`;
+    const projectSessionName = targetForProject(project.slug);
+    if (runtime.name === legacySessionName) {
+      if (sessions.some((session) => session.name === projectSessionName)) {
+        throw new Error(
+          `Cannot migrate ${legacySessionName}: ${projectSessionName} already exists`,
+        );
+      }
+      this.#tmux.renameSession(runtime.name, projectSessionName);
+      this.#log("info", "supervisor.session.migrated", {
+        slug: project.slug,
+        from: legacySessionName,
+        to: projectSessionName,
+      });
+      runtime = {
+        ...runtime,
+        name: projectSessionName,
+      };
+    }
+
+    if (
+      project.actualState === "recovering" &&
+      project.tmuxTarget === runtime.id &&
+      project.currentSummary.startsWith("Restart requested")
+    ) {
+      this.#tmux.killSession(runtime.name);
+      this.#store.recordProjectRuntime(project.slug, {
+        actualState: "recovering",
+        tmuxTarget: null,
+        tmuxSessionName: runtime.name,
+        currentSummary: "Prior runtime stopped; launching replacement",
+        lastHeartbeatAt: project.lastHeartbeatAt,
+      });
+      return;
+    }
+
+    if (
+      this.#config.firstMateAdapter !== "fake" ||
+      runtime.name !== targetForProject(project.slug)
+    ) {
+      const evidence =
+        this.#config.firstMateAdapter === "claude-code"
+          ? firstMateWorkspaceEvidence(project.workspace)
+          : {
+              heartbeatAt: null,
+              latestStatus: null,
+              lastAssistantMessage: null,
+            };
+      this.#store.recordProjectRuntime(project.slug, {
+        actualState: "running",
+        tmuxTarget: runtime.id,
+        tmuxSessionName: runtime.name,
+        currentSummary:
+          evidence.lastAssistantMessage ??
+          evidence.latestStatus ??
+          `${runtime.livePaneCount} live pane${runtime.livePaneCount === 1 ? "" : "s"} in ${runtime.name}`,
+        lastHeartbeatAt:
+          evidence.heartbeatAt ?? project.lastHeartbeatAt,
+      });
+      return;
+    }
+
+    const heartbeat = parseHeartbeat(
+      this.heartbeatPath(project.slug),
+      project.slug,
+    );
+    const heartbeatAge = heartbeat
+      ? this.#now().getTime() - Date.parse(heartbeat.timestamp)
+      : Number.POSITIVE_INFINITY;
+    if (!heartbeat || heartbeatAge > this.#config.heartbeatStaleMs) {
+      if (
+        project.actualState === "starting" &&
+        this.#now().getTime() - Date.parse(project.updatedAt) <=
+          this.#config.heartbeatStaleMs
+      ) {
+        return;
+      }
+      this.#tmux.killSession(runtime.name);
+      this.#store.recordProjectRuntime(project.slug, {
+        actualState: "recovering",
+        tmuxTarget: null,
+        tmuxSessionName: runtime.name,
+        currentSummary: "Heartbeat stale; restarting FirstMate",
+        lastHeartbeatAt: heartbeat?.timestamp ?? project.lastHeartbeatAt,
+      });
+      return;
+    }
+    this.#store.recordProjectRuntime(project.slug, {
+      actualState: heartbeat.state,
+      tmuxTarget: runtime.id,
+      tmuxSessionName: runtime.name,
+      currentSummary: `Fake FirstMate ${heartbeat.state}; heartbeat ${heartbeat.sequence}`,
+      lastHeartbeatAt: heartbeat.timestamp,
+    });
+  }
+}

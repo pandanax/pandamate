@@ -1,0 +1,15 @@
+{
+  "name": "@pandamate/fake-firstmate",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "check": "tsc -p tsconfig.json",
+    "test": "node --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@pandamate/domain": "workspace:*",
+    "@pandamate/firstmate-kit": "workspace:*"
+  }
+}

@@ -1,0 +1,506 @@
+import { fork } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { appendFileSync, statSync } from "node:fs";
+import { resolve } from "node:path";
+import process from "node:process";
+
+import {
+  buildBrainBriefing,
+  PandamateBrain,
+} from "@pandamate/agent-sdk";
+import { requestDaemon } from "@pandamate/client";
+import { loadConfig } from "@pandamate/config";
+import {
+  buildProjectOnboarding,
+  parseProjectOnboardingText,
+  type EventRecord,
+  type Decision,
+  type Message,
+  type Project,
+} from "@pandamate/domain";
+import {
+  protocolVersion,
+  type ResponseData,
+} from "@pandamate/protocol";
+import {
+  discoverTmuxSessions,
+  openSessionInNewITermWindow,
+  requestFirstMateReset,
+  requestGracefulSessionShutdown,
+  TmuxClient,
+} from "@pandamate/runtime-tmux";
+
+import {
+  parseTuiActionRequest,
+  type TuiActionResult,
+} from "../../tui/src/control-protocol.ts";
+import type {
+  EventSummary,
+  ProjectSummary,
+  ServiceSummary,
+} from "../../tui/src/model.ts";
+import {
+  projectSummariesFromDaemon,
+  projectSummariesFromTmux,
+  serviceSummariesFromTmux,
+} from "./discovery.ts";
+import {
+  configuredFirstMateProfile,
+  pathOnlyInput,
+} from "./onboarding.ts";
+
+const tmux = new TmuxClient();
+const controlLog = "/private/tmp/pandamate-control.log";
+function logControl(event: string, detail: string): void {
+  appendFileSync(
+    controlLog,
+    `${new Date().toISOString()} ${event} ${detail.replaceAll("\n", " ")}\n`,
+    { encoding: "utf8", mode: 0o600 },
+  );
+}
+const config = loadConfig();
+const brain = new PandamateBrain({
+  cwd: resolve(import.meta.dirname, "../../.."),
+  claudeExecutable: config.claudeExecutable,
+});
+
+function eventSummary(event: EventRecord): EventSummary {
+  const payload = event.payload;
+  const subject =
+    typeof payload.slug === "string"
+      ? payload.slug
+      : event.projectId
+        ? event.projectId
+        : "system";
+  const detailParts = [payload.title, payload.kind, payload.workspace].filter(
+    (part): part is string => typeof part === "string",
+  );
+  return {
+    sequence: event.sequence,
+    timestamp: event.recordedAt,
+    type: event.type,
+    subject,
+    detail: detailParts.join(" · "),
+  };
+}
+
+async function fetchDaemonProjects(): Promise<readonly Project[] | null> {
+  const response = await requestDaemon(config.socketPath, {
+    protocol: protocolVersion,
+    requestId: `req_tui_${randomUUID()}`,
+    type: "project.list",
+    payload: {},
+  }).catch(() => null);
+  if (!response?.ok) {
+    return null;
+  }
+  const data = response.data as ResponseData as unknown as Record<
+    string,
+    unknown
+  >;
+  return Array.isArray(data.projects)
+    ? (data.projects as readonly Project[])
+    : null;
+}
+
+async function fetchDaemonEvents(after: number): Promise<readonly EventRecord[]> {
+  const response = await requestDaemon(config.socketPath, {
+    protocol: protocolVersion,
+    requestId: `req_tui_${randomUUID()}`,
+    type: "event.list",
+    payload: { after, limit: 100 },
+  }).catch(() => null);
+  if (!response?.ok) {
+    return [];
+  }
+  const data = response.data as ResponseData as unknown as Record<
+    string,
+    unknown
+  >;
+  return Array.isArray(data.events)
+    ? (data.events as readonly EventRecord[])
+    : [];
+}
+
+async function fetchBrainBriefing(): Promise<string> {
+  const [messageResponse, decisionResponse] = await Promise.all([
+    requestDaemon(config.socketPath, {
+      protocol: protocolVersion,
+      requestId: `req_tui_${randomUUID()}`,
+      type: "message.list",
+      payload: { limit: 100 },
+    }),
+    requestDaemon(config.socketPath, {
+      protocol: protocolVersion,
+      requestId: `req_tui_${randomUUID()}`,
+      type: "decision.list",
+      payload: { includeSuperseded: false },
+    }),
+  ]);
+  if (!messageResponse.ok || !decisionResponse.ok) {
+    throw new Error("Pandamate could not build its durable briefing.");
+  }
+  const messageData = messageResponse.data as unknown as Record<string, unknown>;
+  const decisionData = decisionResponse.data as unknown as Record<string, unknown>;
+  return buildBrainBriefing({
+    projects: durableProjects,
+    decisions: Array.isArray(decisionData.decisions)
+      ? (decisionData.decisions as readonly Decision[])
+      : [],
+    messages: Array.isArray(messageData.messages)
+      ? (messageData.messages as readonly Message[])
+      : [],
+    events: (await fetchDaemonEvents(Math.max(0, eventCursor - 100))).slice(-100),
+  });
+}
+
+async function askBrain(question: string): Promise<string> {
+  const briefing = await fetchBrainBriefing();
+  let answer = "";
+  for await (const chunk of brain.ask(question, briefing)) {
+    if (chunk.type === "text") {
+      answer += chunk.text;
+    } else if (chunk.type === "result" && answer.length === 0) {
+      answer = chunk.text;
+    } else if (chunk.type === "error") {
+      throw new Error(chunk.text || "Pandamate brain failed.");
+    }
+  }
+  return answer.trim() || "Pandamate brain returned no text.";
+}
+
+function buildTmuxProjection(
+  durable: readonly Project[],
+): {
+  readonly projects: readonly ProjectSummary[];
+  readonly services: readonly ServiceSummary[];
+} {
+  const sessions = discoverTmuxSessions(tmux);
+  const durableSessionNames = new Set(
+    durable.flatMap((project) =>
+      project.tmuxSessionName ? [project.tmuxSessionName] : [],
+    ),
+  );
+  return {
+    projects: [
+      ...projectSummariesFromDaemon(durable, new Date(), sessions),
+      ...projectSummariesFromTmux(
+        sessions.filter(
+          (session) => !durableSessionNames.has(session.name),
+        ),
+      ),
+    ],
+    services: serviceSummariesFromTmux(sessions),
+  };
+}
+
+let durableProjects = (await fetchDaemonProjects()) ?? [];
+let tmuxProjection = buildTmuxProjection(durableProjects);
+let projects = tmuxProjection.projects;
+let services = tmuxProjection.services;
+let events = (await fetchDaemonEvents(0)).map(eventSummary);
+const allowedSessions = new Set(
+  projects.flatMap((project) =>
+    project.sessionName ? [project.sessionName] : [],
+  ),
+);
+const projectSlugBySession = new Map<string, string>();
+function rebuildRuntimeIndexes(): void {
+  allowedSessions.clear();
+  projectSlugBySession.clear();
+  for (const project of projects) {
+    if (project.sessionName) {
+      allowedSessions.add(project.sessionName);
+    }
+  }
+  for (const project of durableProjects) {
+    if (project.tmuxSessionName && project.tmuxTarget) {
+      projectSlugBySession.set(project.tmuxSessionName, project.slug);
+    }
+  }
+}
+rebuildRuntimeIndexes();
+const tuiEntry = resolve(import.meta.dirname, "../../tui/src/index.ts");
+const child = fork(tuiEntry, [], {
+  env: {
+    ...process.env,
+    PANDAMATE_PROJECTS_JSON: JSON.stringify(projects),
+    PANDAMATE_SERVICES_JSON: JSON.stringify(services),
+    PANDAMATE_EVENTS_JSON: JSON.stringify(events),
+  },
+  execArgv: ["--experimental-ffi"],
+  stdio: ["inherit", "inherit", "inherit", "ipc"],
+});
+logControl("launcher.started", `child=${child.pid ?? "unknown"}`);
+
+function sendResult(result: TuiActionResult): void {
+  logControl(
+    "action.result",
+    `${result.action} ${result.sessionName ?? "pandamate"} success=${result.success} ${result.message}`,
+  );
+  if (child.connected) {
+    child.send(result);
+  } else {
+    logControl("action.result.dropped", "child IPC disconnected");
+  }
+}
+
+let refreshInProgress = false;
+let eventCursor = events.at(-1)?.sequence ?? 0;
+let lastProjectionJson = JSON.stringify({ projects, services, events });
+async function refreshProjection(): Promise<void> {
+  if (refreshInProgress) {
+    return;
+  }
+  refreshInProgress = true;
+  try {
+    const refreshedProjects = await fetchDaemonProjects();
+    if (refreshedProjects !== null) {
+      durableProjects = refreshedProjects;
+    }
+    const newEvents = await fetchDaemonEvents(eventCursor);
+    if (newEvents.length > 0) {
+      eventCursor = newEvents.at(-1)?.sequence ?? eventCursor;
+      events = [...events, ...newEvents.map(eventSummary)].slice(-500);
+    }
+    tmuxProjection = buildTmuxProjection(durableProjects);
+    projects = tmuxProjection.projects;
+    services = tmuxProjection.services;
+    rebuildRuntimeIndexes();
+    const projectionJson = JSON.stringify({ projects, services, events });
+    if (child.connected && projectionJson !== lastProjectionJson) {
+      child.send({
+        type: "projection.update",
+        projects,
+        services,
+        events,
+      });
+      lastProjectionJson = projectionJson;
+    }
+  } catch (error) {
+    logControl(
+      "projection.refresh.failed",
+      error instanceof Error ? error.message : String(error),
+    );
+  } finally {
+    refreshInProgress = false;
+  }
+}
+
+const refreshTimer = setInterval(() => {
+  void refreshProjection();
+}, 500);
+refreshTimer.unref();
+
+child.on("message", async (value: unknown) => {
+  logControl("action.received", JSON.stringify(value));
+  let request;
+  try {
+    request = parseTuiActionRequest(value);
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof Error ? error.message : "Invalid TUI action"}\n`,
+    );
+    return;
+  }
+
+  if (request.action === "pandamate.submit") {
+    try {
+      const submittedPath = pathOnlyInput(request.text);
+      const looksLikeOnboarding =
+        submittedPath !== null ||
+        (request.text.includes("/") &&
+          /\b(firstmate[\s_-]*(?:arc|git|docs)|doc[\s_-]*research|arc|git|docs)\b/i.test(
+            request.text,
+          ));
+      if (!looksLikeOnboarding) {
+        const answer = await askBrain(request.text);
+        sendResult({
+          type: "action.result",
+          action: request.action,
+          success: true,
+          message: answer.slice(0, 240),
+        });
+        return;
+      }
+      const onboarding =
+        submittedPath === null
+          ? parseProjectOnboardingText(request.text)
+          : (() => {
+              const detected = configuredFirstMateProfile(submittedPath);
+              return buildProjectOnboarding(
+                detected.profile,
+                detected.workspace,
+              );
+            })();
+      if (!statSync(onboarding.project.workspace).isDirectory()) {
+        throw new Error(
+          `Workspace is not a directory: ${onboarding.project.workspace}`,
+        );
+      }
+      const createResponse = await requestDaemon(config.socketPath, {
+        protocol: protocolVersion,
+        requestId: `req_tui_${randomUUID()}`,
+        type: "project.create",
+        idempotencyKey: `tui:${randomUUID()}`,
+        payload: onboarding.project,
+      });
+      if (!createResponse.ok) {
+        throw new Error(createResponse.error.message);
+      }
+      const startResponse = await requestDaemon(config.socketPath, {
+        protocol: protocolVersion,
+        requestId: `req_tui_${randomUUID()}`,
+        type: "project.desired.set",
+        idempotencyKey: `tui:${randomUUID()}`,
+        payload: {
+          slug: onboarding.project.slug,
+          desiredState: "running",
+        },
+      });
+      if (!startResponse.ok) {
+        throw new Error(startResponse.error.message);
+      }
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        success: true,
+        message: `Created ${onboarding.project.slug} as ${onboarding.profile}; FirstMate start requested.`,
+      });
+      await refreshProjection();
+    } catch (error) {
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Pandamate could not process the input.",
+      });
+    }
+    return;
+  }
+
+  if (!allowedSessions.has(request.sessionName)) {
+    sendResult({
+      type: "action.result",
+      action: request.action,
+      sessionName: request.sessionName,
+      success: false,
+      message: `Session ${request.sessionName} is not an adopted Fleet item.`,
+    });
+    return;
+  }
+
+  try {
+    const projectSlug = projectSlugBySession.get(request.sessionName);
+    if (!tmux.hasSession(request.sessionName)) {
+      throw new Error(`Session ${request.sessionName} is no longer running.`);
+    }
+
+    if (request.action === "session.open") {
+      if (projectSlug) {
+        const response = await requestDaemon(config.socketPath, {
+          protocol: protocolVersion,
+          requestId: `req_tui_${randomUUID()}`,
+          type: "project.open",
+          payload: { slug: projectSlug },
+        });
+        if (!response.ok) {
+          throw new Error(response.error.message);
+        }
+      } else {
+        openSessionInNewITermWindow(tmux, request.sessionName);
+      }
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        sessionName: request.sessionName,
+        success: true,
+        message: `Opened ${request.sessionName} in a new iTerm window.`,
+      });
+      return;
+    }
+
+    if (request.action === "session.graceful-shutdown") {
+      const launch = requestGracefulSessionShutdown(
+        tmux,
+        request.sessionName,
+      );
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        sessionName: request.sessionName,
+        success: true,
+        message: `Graceful shutdown sent to ${request.sessionName} window 0 (${launch.pane}).`,
+      });
+      return;
+    }
+
+    if (request.action === "session.reset") {
+      const launch = requestFirstMateReset(tmux, request.sessionName);
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        sessionName: request.sessionName,
+        success: true,
+        message: `Reset sent to ${request.sessionName} window 0 (${launch.pane}).`,
+      });
+      return;
+    }
+
+    if (projectSlug) {
+      const response = await requestDaemon(config.socketPath, {
+        protocol: protocolVersion,
+        requestId: `req_tui_${randomUUID()}`,
+        type: "project.desired.set",
+        idempotencyKey: `tui:${randomUUID()}`,
+        payload: {
+          slug: projectSlug,
+          desiredState: "stopped",
+        },
+      });
+      if (!response.ok) {
+        throw new Error(response.error.message);
+      }
+      if (tmux.hasSession(request.sessionName)) {
+        tmux.killSession(request.sessionName);
+      }
+    } else {
+      tmux.killSession(request.sessionName);
+    }
+    await refreshProjection();
+    sendResult({
+      type: "action.result",
+      action: request.action,
+      sessionName: request.sessionName,
+      success: true,
+      message: `Stopped tmux session ${request.sessionName}.`,
+    });
+  } catch (error) {
+    sendResult({
+      type: "action.result",
+      action: request.action,
+      sessionName: request.sessionName,
+      success: false,
+      message:
+        error instanceof Error ? error.message : "The tmux action failed.",
+    });
+  }
+});
+
+child.on("error", (error) => {
+  clearInterval(refreshTimer);
+  process.stderr.write(`${error.stack ?? error.message}\n`);
+  process.exitCode = 1;
+});
+
+child.on("exit", (code, signal) => {
+  clearInterval(refreshTimer);
+  if (signal) {
+    process.kill(process.pid, signal);
+  } else {
+    process.exitCode = code ?? 1;
+  }
+});

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Create Pandamate Project"
+  short_description: "Onboard a folder as a managed FirstMate"
+  default_prompt: "Use $create-project to create and start a Pandamate project from this folder."

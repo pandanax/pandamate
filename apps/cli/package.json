@@ -1,0 +1,22 @@
+{
+  "name": "@pandamate/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "pandamate": "./src/main.ts"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "check": "tsc -p tsconfig.json",
+    "test": "node --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@pandamate/client": "workspace:*",
+    "@pandamate/config": "workspace:*",
+    "@pandamate/domain": "workspace:*",
+    "@pandamate/firstmate-kit": "workspace:*",
+    "@pandamate/protocol": "workspace:*",
+    "@pandamate/runtime-tmux": "workspace:*"
+  }
+}
