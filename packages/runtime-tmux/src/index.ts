@@ -556,6 +556,72 @@ export function openSessionAsControlTab(
   return projectSessionId;
 }
 
+/**
+ * Close a FirstMate's Pandamate home tab without stopping the FirstMate. The
+ * linked window is unlinked from `pandamate:home` while the project keeps
+ * running in its own durable session, focus returns to the home base window,
+ * and once the last project tab is gone the tab strip is hidden again so home
+ * is a clean full-screen surface. Idempotent and a safe no-op when home is not
+ * running, the project session is already gone, or it was never opened as a
+ * tab. Returns true only when a tab was actually unlinked.
+ */
+export function closeControlTab(
+  tmux: Pick<TmuxClient, "run" | "resolveSession">,
+  sessionName: string,
+): boolean {
+  if (isPandamateControlSession(sessionName)) {
+    throw new Error("Cannot close a Pandamate control session tab");
+  }
+  if (!sessionName.startsWith("firstmate-")) {
+    throw new Error("Only FirstMate project sessions have control tabs");
+  }
+
+  let controlSessionId: string;
+  try {
+    controlSessionId = tmux.resolveSession(targetForPandamateService("home"));
+  } catch {
+    return false;
+  }
+
+  let projectWindowId: string;
+  try {
+    const projectSessionId = tmux.resolveSession(sessionName);
+    projectWindowId = validateStableWindowId(
+      tmux.run([
+        "display-message",
+        "-p",
+        "-t",
+        `${projectSessionId}:0`,
+        "#{window_id}",
+      ]),
+    );
+  } catch {
+    return false;
+  }
+
+  const controlWindows = listControlWindows(tmux, controlSessionId);
+  const linked = controlWindows.find((window) => window.id === projectWindowId);
+  if (!linked) {
+    return false;
+  }
+
+  tmux.run(["unlink-window", "-t", `${controlSessionId}:${linked.index}`]);
+
+  const remaining = controlWindows.filter(
+    (window) => window.id !== projectWindowId,
+  );
+  const homeIndex = remaining.reduce(
+    (min, window) => Math.min(min, window.index),
+    linked.index,
+  );
+  const projectTabsLeft = remaining.some((window) => window.index !== homeIndex);
+  if (!projectTabsLeft) {
+    tmux.run(["set-option", "-t", controlSessionId, "status", "off"]);
+  }
+  tmux.run(["select-window", "-t", `${controlSessionId}:${homeIndex}`]);
+  return true;
+}
+
 export const gracefulShutdownPrompt = `Всех матросов увольняем и готовимся к полному закрытию. Выполни штатный graceful shutdown этого FirstMate: сохрани состояние и checkpoint для последующего продолжения; корректно заверши всех своих матросов, дочерние сессии, процессы, серверы и соединения; если это Arcadia и workspace смонтирован, безопасно размонтируй его установленным для проекта способом. Не трогай чужие проекты, чужие tmux-сессии и pandamate:* control-plane sessions. Свою tmux-сессию закрой самостоятельно только самым последним шагом, когда всё остальное уже завершено. Это явная команда на полное корректное закрытие — выполни её до конца.`;
 
 export const resetFirstMatePrompt = `Делаем полный Reset этого FirstMate. Сначала штатно сверни текущую смену: сохрани checkpoint, уволь всех матросов, корректно заверши дочерние сессии, процессы, Watcher, серверы и соединения, освободи временные ресурсы. Затем заново полностью разверни FirstMate по обычной процедуре этого проекта: восстанови Watcher, служебные tmux-вкладки и всё необходимое для новой смены. Главный pane в tmux window 0 и основную tmux-сессию не закрывай — они нужны, чтобы завершить повторное развёртывание. Не трогай чужие проекты, чужие tmux-сессии и pandamate:* control-plane sessions. Это явная команда на последовательный graceful stop и последующий deploy; выполни обе части до конца.`;

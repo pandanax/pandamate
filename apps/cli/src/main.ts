@@ -38,7 +38,7 @@ function usage(): never {
   process.stderr.write(`Usage:
   pandamate daemon start|stop|status
   pandamate status [--json]
-  pandamate start|stop|restart|open <project> [--json]
+  pandamate start|stop|restart|open|close-tab <project> [--json]
   pandamate send <project> <instruction...> [--priority normal|high|urgent] [--json]
   pandamate inbox list [project] [--json]
   pandamate inbox lease <project> <owner> [--json]
@@ -209,7 +209,7 @@ async function statusCommand(): Promise<void> {
 }
 
 async function lifecycleCommand(
-  action: "start" | "stop" | "restart" | "open",
+  action: "start" | "stop" | "restart" | "open" | "close-tab",
 ): Promise<void> {
   const slug = args[1];
   if (!slug) {
@@ -227,6 +227,21 @@ async function lifecycleCommand(
     output(
       { project, target: project.tmuxTarget },
       `Opened ${project.slug}: ${project.tmuxSessionName ?? project.tmuxTarget}\n`,
+    );
+    return;
+  }
+  if (action === "close-tab") {
+    const project = projectFrom(
+      await send({
+        protocol: protocolVersion,
+        requestId: requestId(),
+        type: "project.tab.close",
+        payload: { slug },
+      }),
+    );
+    output(
+      { project, target: project.tmuxTarget },
+      `Closed ${project.slug} tab; FirstMate keeps running.\n`,
     );
     return;
   }
@@ -755,6 +770,7 @@ try {
     case "stop":
     case "restart":
     case "open":
+    case "close-tab":
       await lifecycleCommand(args[0]);
       break;
     case "project":

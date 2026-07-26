@@ -41,6 +41,18 @@ Phase 1 has a working vertical slice:
   collides with tmux `session:window` target parsing. The legacy iTerm adapter
   (`openSessionInNewITermWindow`) remains available as a separate-window
   fallback.
+- Closing a tab is the safe inverse of opening it. `closeControlTab`
+  (protocol `project.tab.close`, CLI `pandamate close-tab <project>`) unlinks the
+  project window from `pandamate:home` while the FirstMate keeps running in its
+  own durable session, returns focus to the home base window, and hides the tab
+  strip again once the last project tab is gone so home is a clean full-screen
+  surface. It is idempotent and a safe no-op when home is down, the project
+  session is gone, or it was never a tab. Never `kill-window` a project tab
+  directly — that destroys the shared FirstMate window; unlink instead.
+- Tab teardown is automatic: before the supervisor stops, restarts, or recovers
+  a FirstMate (any `killSession`), it first detaches that project's home tab, so
+  `x`, a desired stop, a restart, and heartbeat recovery never leave an orphan
+  tab behind. Detach failures are logged and never block the teardown.
 - `g` asks the selected FirstMate to shut down gracefully by typing the shutdown
   instruction into the active pane of its tmux window `0`; `x` remains the
   separately confirmed immediate whole-session kill.

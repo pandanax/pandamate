@@ -51,6 +51,12 @@ export type Request =
   | {
       readonly protocol: 1;
       readonly requestId: string;
+      readonly type: "project.tab.close";
+      readonly payload: { readonly slug: string };
+    }
+  | {
+      readonly protocol: 1;
+      readonly requestId: string;
       readonly type: "project.create";
       readonly idempotencyKey: string;
       readonly payload: CreateProjectInput;
@@ -257,6 +263,7 @@ export function parseRequest(value: unknown): Request {
       };
     case "project.get":
     case "project.open":
+    case "project.tab.close":
       return {
         protocol: protocolVersion,
         requestId,

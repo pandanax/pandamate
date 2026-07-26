@@ -8,6 +8,7 @@ import type { PandamateConfig } from "@pandamate/config";
 import type { Project } from "@pandamate/domain";
 import { firstMateWorkspaceEvidence } from "@pandamate/firstmate-kit";
 import {
+  closeControlTab,
   discoverTmuxSessions,
   targetForProject,
   type DiscoveredTmuxSession,
@@ -34,7 +35,11 @@ export interface SupervisorLog {
 
 type SupervisorTmux = Pick<
   TmuxClient,
-  "run" | "createDetachedInDirectory" | "killSession" | "renameSession"
+  | "run"
+  | "resolveSession"
+  | "createDetachedInDirectory"
+  | "killSession"
+  | "renameSession"
 >;
 
 export function firstMateProfileForProject(
@@ -282,6 +287,23 @@ Own this project's detailed work and durable project state. Read the repository 
     }
   }
 
+  /**
+   * Best-effort removal of a project's Pandamate home tab before its tmux
+   * session is torn down, so stopping, restarting, or recovering a FirstMate
+   * never leaves an orphan tab in `pandamate:home`. Failures never block the
+   * teardown itself.
+   */
+  #detachControlTab(sessionName: string): void {
+    try {
+      closeControlTab(this.#tmux, sessionName);
+    } catch (error) {
+      this.#log("error", "supervisor.tab.detach_failed", {
+        sessionName,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   #runtimeFor(
     project: Project,
     sessions: readonly DiscoveredTmuxSession[],
@@ -303,6 +325,7 @@ Own this project's detailed work and durable project state. Read the repository 
         return;
       }
       if (runtime) {
+        this.#detachControlTab(runtime.name);
         this.#tmux.killSession(runtime.name);
         this.#log("info", "supervisor.session.stopped", {
           slug: project.slug,
@@ -373,6 +396,7 @@ Own this project's detailed work and durable project state. Read the repository 
       project.tmuxTarget === runtime.id &&
       project.currentSummary.startsWith("Restart requested")
     ) {
+      this.#detachControlTab(runtime.name);
       this.#tmux.killSession(runtime.name);
       this.#store.recordProjectRuntime(project.slug, {
         actualState: "recovering",
@@ -425,6 +449,7 @@ Own this project's detailed work and durable project state. Read the repository 
       ) {
         return;
       }
+      this.#detachControlTab(runtime.name);
       this.#tmux.killSession(runtime.name);
       this.#store.recordProjectRuntime(project.slug, {
         actualState: "recovering",

@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   attachCommandForSessionId,
   discoverTmuxSessions,
+  closeControlTab,
   isPandamateControlSession,
   openSessionAsControlTab,
   openSessionInNewITermWindow,
@@ -289,6 +290,93 @@ test("refuses to open control sessions or non-project sessions as tabs", () => {
   const tmux = tabTmux("@7", "0\t@1");
   assert.throws(() => openSessionAsControlTab(tmux, "pandamate:home"));
   assert.throws(() => openSessionAsControlTab(tmux, "randomsession"));
+  assert.deepEqual(tmux.calls, []);
+});
+
+function closeTmux(
+  windowId: string,
+  controlWindows: string,
+  options: { homeMissing?: boolean; projectMissing?: boolean } = {},
+): { calls: string[][]; run(args: readonly string[]): string; resolveSession(name: string): string } {
+  const calls: string[][] = [];
+  const responses = new Map<string, string>([
+    ["display-message -p -t $9:0 #{window_id}", windowId],
+    ["list-windows -t $4 -F #{window_index}\t#{window_id}", controlWindows],
+  ]);
+  return {
+    calls,
+    resolveSession(name: string): string {
+      if (name === "pandamate:home") {
+        if (options.homeMissing) {
+          throw new Error("Unknown tmux session: pandamate:home");
+        }
+        return "$4";
+      }
+      if (name === "firstmate-mandala") {
+        if (options.projectMissing) {
+          throw new Error("Unknown tmux session: firstmate-mandala");
+        }
+        return "$9";
+      }
+      throw new Error(`Unknown tmux session: ${name}`);
+    },
+    run(args: readonly string[]): string {
+      calls.push([...args]);
+      return responses.get(args.join(" ")) ?? "";
+    },
+  };
+}
+
+test("closing the last project tab unlinks it and restores clean home", () => {
+  const tmux = closeTmux("@7", "0\t@1\n1\t@7");
+  const closed = closeControlTab(tmux, "firstmate-mandala");
+
+  assert.equal(closed, true);
+  assert.deepEqual(tmux.calls, [
+    ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
+    ["list-windows", "-t", "$4", "-F", "#{window_index}\t#{window_id}"],
+    ["unlink-window", "-t", "$4:1"],
+    ["set-option", "-t", "$4", "status", "off"],
+    ["select-window", "-t", "$4:0"],
+  ]);
+});
+
+test("closing one of several tabs keeps the tab strip and returns home", () => {
+  const tmux = closeTmux("@7", "0\t@1\n1\t@7\n2\t@9");
+  const closed = closeControlTab(tmux, "firstmate-mandala");
+
+  assert.equal(closed, true);
+  assert.deepEqual(tmux.calls, [
+    ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
+    ["list-windows", "-t", "$4", "-F", "#{window_index}\t#{window_id}"],
+    ["unlink-window", "-t", "$4:1"],
+    ["select-window", "-t", "$4:0"],
+  ]);
+});
+
+test("closing a project that is not currently a tab is a no-op", () => {
+  const tmux = closeTmux("@7", "0\t@1");
+  const closed = closeControlTab(tmux, "firstmate-mandala");
+
+  assert.equal(closed, false);
+  assert.deepEqual(tmux.calls, [
+    ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
+    ["list-windows", "-t", "$4", "-F", "#{window_index}\t#{window_id}"],
+  ]);
+});
+
+test("closing a tab when home is not running is a safe no-op", () => {
+  const tmux = closeTmux("@7", "0\t@1", { homeMissing: true });
+  const closed = closeControlTab(tmux, "firstmate-mandala");
+
+  assert.equal(closed, false);
+  assert.deepEqual(tmux.calls, []);
+});
+
+test("close refuses control sessions and non-project sessions", () => {
+  const tmux = closeTmux("@7", "0\t@1");
+  assert.throws(() => closeControlTab(tmux, "pandamate:home"));
+  assert.throws(() => closeControlTab(tmux, "randomsession"));
   assert.deepEqual(tmux.calls, []);
 });
 

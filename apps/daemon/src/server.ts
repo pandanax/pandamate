@@ -13,6 +13,7 @@ import {
 } from "@pandamate/protocol";
 import {
   discoverTmuxSessions,
+  closeControlTab,
   openSessionAsControlTab,
   type TmuxClient,
 } from "@pandamate/runtime-tmux";
@@ -81,6 +82,10 @@ function handleRequest(
     tmux: Pick<TmuxClient, "run" | "resolveSession">,
     sessionName: string,
   ) => string,
+  closeSession: (
+    tmux: Pick<TmuxClient, "run" | "resolveSession">,
+    sessionName: string,
+  ) => boolean,
   memory: MemoryMaterializer,
 ): Response {
   switch (request.type) {
@@ -116,6 +121,18 @@ function handleRequest(
           throw new Error(`Project ${project.slug} has no running tmux session`);
         }
         openSession(tmux, project.tmuxSessionName);
+        return { project };
+      });
+    case "project.tab.close":
+      return response(request.requestId, () => {
+        const project = store.getProject(request.payload.slug);
+        if (!project) {
+          throw new Error(`Unknown project: ${request.payload.slug}`);
+        }
+        if (!project.tmuxSessionName) {
+          throw new Error(`Project ${project.slug} has no running tmux session`);
+        }
+        closeSession(tmux, project.tmuxSessionName);
         return { project };
       });
     case "project.create":
@@ -293,6 +310,10 @@ export async function startServer(
     tmux: Pick<TmuxClient, "run" | "resolveSession">,
     sessionName: string,
   ) => string = openSessionAsControlTab,
+  closeSession: (
+    tmux: Pick<TmuxClient, "run" | "resolveSession">,
+    sessionName: string,
+  ) => boolean = closeControlTab,
 ): Promise<DaemonServer> {
   removeSocket(config.socketPath);
   const memory = new MemoryMaterializer(config.memoryDirectory);
@@ -326,6 +347,7 @@ export async function startServer(
           },
           tmux,
           openSession,
+          closeSession,
           memory,
         );
       } catch (error) {
