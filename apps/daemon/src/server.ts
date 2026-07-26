@@ -13,7 +13,7 @@ import {
 } from "@pandamate/protocol";
 import {
   discoverTmuxSessions,
-  openSessionInNewITermWindow,
+  openSessionAsControlTab,
   type TmuxClient,
 } from "@pandamate/runtime-tmux";
 import type { PandamateStore } from "@pandamate/storage";
@@ -78,7 +78,7 @@ function handleRequest(
   requestShutdown: () => void,
   tmux: Pick<TmuxClient, "run" | "resolveSession">,
   openSession: (
-    tmux: Pick<TmuxClient, "resolveSession">,
+    tmux: Pick<TmuxClient, "run" | "resolveSession">,
     sessionName: string,
   ) => string,
   memory: MemoryMaterializer,
@@ -290,9 +290,9 @@ export async function startServer(
   onShutdown: () => void,
   tmux: Pick<TmuxClient, "run" | "resolveSession">,
   openSession: (
-    tmux: Pick<TmuxClient, "resolveSession">,
+    tmux: Pick<TmuxClient, "run" | "resolveSession">,
     sessionName: string,
-  ) => string = openSessionInNewITermWindow,
+  ) => string = openSessionAsControlTab,
 ): Promise<DaemonServer> {
   removeSocket(config.socketPath);
   const memory = new MemoryMaterializer(config.memoryDirectory);

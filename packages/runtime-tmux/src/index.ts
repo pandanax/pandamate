@@ -4,6 +4,7 @@ import { isAbsolute, normalize } from "node:path";
 const slugPattern = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const stablePaneIdPattern = /^\$\d+:@\d+\.%\d+$/;
 const stableSessionIdPattern = /^\$\d+$/;
+const stableWindowIdPattern = /^@\d+$/;
 const clientTtyPattern = /^\/dev\/(?:ttys?[a-zA-Z0-9]+|pts\/\d+)$/;
 const socketNamePattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 
@@ -77,6 +78,13 @@ export function validateStablePaneId(target: string): string {
 export function validateStableSessionId(target: string): string {
   if (!stableSessionIdPattern.test(target)) {
     throw new Error(`Invalid stable tmux session id: ${target}`);
+  }
+  return target;
+}
+
+export function validateStableWindowId(target: string): string {
+  if (!stableWindowIdPattern.test(target)) {
+    throw new Error(`Invalid stable tmux window id: ${target}`);
   }
   return target;
 }
@@ -451,6 +459,101 @@ export function openSessionInNewITermWindow(
     "end tell",
   ]);
   return sessionId;
+}
+
+interface ControlWindow {
+  readonly index: number;
+  readonly id: string;
+}
+
+function listControlWindows(
+  tmux: Pick<TmuxClient, "run">,
+  controlSessionId: string,
+): readonly ControlWindow[] {
+  const rows = tmux.run([
+    "list-windows",
+    "-t",
+    controlSessionId,
+    "-F",
+    "#{window_index}\t#{window_id}",
+  ]);
+  if (rows === "") {
+    return [];
+  }
+  return rows.split("\n").map((row) => {
+    const [index, id] = row.split("\t");
+    if (index === undefined || id === undefined) {
+      throw new Error(`Malformed tmux window row: ${row}`);
+    }
+    const parsedIndex = Number(index);
+    if (!Number.isSafeInteger(parsedIndex) || parsedIndex < 0) {
+      throw new Error(`Invalid tmux window index: ${index}`);
+    }
+    return { index: parsedIndex, id: validateStableWindowId(id) };
+  });
+}
+
+/**
+ * Open a FirstMate project session as a tab inside the attached Pandamate home
+ * session instead of spawning a separate terminal window. Window 0 of the
+ * project session is linked into `pandamate:home`, so the FirstMate keeps
+ * running in its own durable session while also appearing as a tmux tab the
+ * user switches to with the tmux prefix. Idempotent: a project already linked
+ * as a tab is just selected again.
+ *
+ * All targets use stable session ids (`$N`) so the colon in the control
+ * session name (`pandamate:home`) never collides with tmux `session:window`
+ * target parsing.
+ */
+export function openSessionAsControlTab(
+  tmux: Pick<TmuxClient, "run" | "resolveSession">,
+  sessionName: string,
+): string {
+  if (isPandamateControlSession(sessionName)) {
+    throw new Error("Cannot open a Pandamate control session as a tab");
+  }
+  if (!sessionName.startsWith("firstmate-")) {
+    throw new Error("Only FirstMate project sessions open as control tabs");
+  }
+  const slug = validateProjectSlug(sessionName.slice("firstmate-".length));
+  const projectSessionId = tmux.resolveSession(sessionName);
+  const controlSessionId = tmux.resolveSession(
+    targetForPandamateService("home"),
+  );
+
+  const projectWindowId = validateStableWindowId(
+    tmux.run([
+      "display-message",
+      "-p",
+      "-t",
+      `${projectSessionId}:0`,
+      "#{window_id}",
+    ]),
+  );
+
+  const controlWindows = listControlWindows(tmux, controlSessionId);
+  const linked = controlWindows.find((window) => window.id === projectWindowId);
+  const targetIndex = linked
+    ? linked.index
+    : controlWindows.reduce((max, window) => Math.max(max, window.index), -1) +
+      1;
+  const targetWindow = `${controlSessionId}:${targetIndex}`;
+
+  if (!linked) {
+    tmux.run(["link-window", "-s", `${projectSessionId}:0`, "-t", targetWindow]);
+    tmux.run([
+      "set-window-option",
+      "-t",
+      targetWindow,
+      "automatic-rename",
+      "off",
+    ]);
+    tmux.run(["rename-window", "-t", targetWindow, slug]);
+  }
+
+  tmux.run(["set-option", "-t", controlSessionId, "status", "on"]);
+  tmux.run(["select-window", "-t", targetWindow]);
+  return projectSessionId;
 }
 
 export const gracefulShutdownPrompt = `Всех матросов увольняем и готовимся к полному закрытию. Выполни штатный graceful shutdown этого FirstMate: сохрани состояние и checkpoint для последующего продолжения; корректно заверши всех своих матросов, дочерние сессии, процессы, серверы и соединения; если это Arcadia и workspace смонтирован, безопасно размонтируй его установленным для проекта способом. Не трогай чужие проекты, чужие tmux-сессии и pandamate:* control-plane sessions. Свою tmux-сессию закрой самостоятельно только самым последним шагом, когда всё остальное уже завершено. Это явная команда на полное корректное закрытие — выполни её до конца.`;

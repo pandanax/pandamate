@@ -5,6 +5,7 @@ import {
   attachCommandForSessionId,
   discoverTmuxSessions,
   isPandamateControlSession,
+  openSessionAsControlTab,
   openSessionInNewITermWindow,
   requestFirstMateReset,
   requestGracefulSessionShutdown,
@@ -230,6 +231,65 @@ test("opens iTerm with an argument array and a stable resolved session id", () =
     scriptLine,
     /\/opt\/homebrew\/bin\/tmux attach-session -t '\$12'/,
   );
+});
+
+function tabTmux(
+  windowId: string,
+  controlWindows: string,
+): { calls: string[][]; run(args: readonly string[]): string; resolveSession(name: string): string } {
+  const calls: string[][] = [];
+  const responses = new Map<string, string>([
+    ["display-message -p -t $9:0 #{window_id}", windowId],
+    ["list-windows -t $4 -F #{window_index}\t#{window_id}", controlWindows],
+  ]);
+  return {
+    calls,
+    resolveSession(name: string): string {
+      if (name === "firstmate-mandala") return "$9";
+      if (name === "pandamate:home") return "$4";
+      throw new Error(`Unknown tmux session: ${name}`);
+    },
+    run(args: readonly string[]): string {
+      calls.push([...args]);
+      return responses.get(args.join(" ")) ?? "";
+    },
+  };
+}
+
+test("links a FirstMate window as a fresh Pandamate home tab and shows tabs", () => {
+  const tmux = tabTmux("@7", "0\t@1");
+  const result = openSessionAsControlTab(tmux, "firstmate-mandala");
+
+  assert.equal(result, "$9");
+  assert.deepEqual(tmux.calls, [
+    ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
+    ["list-windows", "-t", "$4", "-F", "#{window_index}\t#{window_id}"],
+    ["link-window", "-s", "$9:0", "-t", "$4:1"],
+    ["set-window-option", "-t", "$4:1", "automatic-rename", "off"],
+    ["rename-window", "-t", "$4:1", "mandala"],
+    ["set-option", "-t", "$4", "status", "on"],
+    ["select-window", "-t", "$4:1"],
+  ]);
+});
+
+test("re-opening an already linked project just selects its existing tab", () => {
+  const tmux = tabTmux("@7", "0\t@1\n1\t@7");
+  const result = openSessionAsControlTab(tmux, "firstmate-mandala");
+
+  assert.equal(result, "$9");
+  assert.deepEqual(tmux.calls, [
+    ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
+    ["list-windows", "-t", "$4", "-F", "#{window_index}\t#{window_id}"],
+    ["set-option", "-t", "$4", "status", "on"],
+    ["select-window", "-t", "$4:1"],
+  ]);
+});
+
+test("refuses to open control sessions or non-project sessions as tabs", () => {
+  const tmux = tabTmux("@7", "0\t@1");
+  assert.throws(() => openSessionAsControlTab(tmux, "pandamate:home"));
+  assert.throws(() => openSessionAsControlTab(tmux, "randomsession"));
+  assert.deepEqual(tmux.calls, []);
 });
 
 test("iTerm attach command only accepts stable tmux session ids", () => {

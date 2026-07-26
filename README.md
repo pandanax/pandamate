@@ -31,9 +31,16 @@ Phase 1 has a working vertical slice:
 - a separate Pandamate Services projection for `home`, `write`, probes, and
   future service runtimes; these control-plane sessions never enter Fleet;
 - existing non-control tmux sessions discovered without restarting them;
-- `o` opens a FirstMate in a separate iTerm window while Pandamate stays home.
-  The iTerm adapter resolves and supplies tmux's absolute executable path
-  because iTerm profile commands do not search the shell `$PATH`.
+- `o` opens a FirstMate as a tmux tab inside the attached `pandamate:home`
+  session instead of spawning a separate terminal window. Window `0` of the
+  project session is linked into home (the FirstMate keeps running in its own
+  durable session), tabs become visible via `status on`, and the client selects
+  the new tab; switch between home and FirstMates with the tmux prefix and a
+  window number. Re-opening an already linked project just selects its tab.
+  Targets use stable session ids (`$N`) so the colon in `pandamate:home` never
+  collides with tmux `session:window` target parsing. The legacy iTerm adapter
+  (`openSessionInNewITermWindow`) remains available as a separate-window
+  fallback.
 - `g` asks the selected FirstMate to shut down gracefully by typing the shutdown
   instruction into the active pane of its tmux window `0`; `x` remains the
   separately confirmed immediate whole-session kill.
