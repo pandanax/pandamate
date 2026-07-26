@@ -74,8 +74,11 @@ function idle_probe_is_running() {
     /usr/bin/grep -v grep >/dev/null
 }
 
+# Restart the daemon on every launch so the desktop shortcut always runs the
+# current code from PROJECT_DIR. `daemon start` alone no-ops when an old daemon
+# is already running, which is why launches kept booting the stale version.
 if ! /bin/zsh -lc \
-  "cd '$PROJECT_DIR' && source /Users/pandanax/.nvm/nvm.sh && nvm use >/dev/null && pnpm pandamate daemon start"; then
+  "cd '$PROJECT_DIR' && source /Users/pandanax/.nvm/nvm.sh && nvm use >/dev/null && { pnpm pandamate daemon stop || true; } && pnpm pandamate daemon start"; then
   show_error "Pandamate daemon could not start. See $LOG"
   exit 1
 fi
