@@ -94,6 +94,14 @@ Discovery failures are never read as success. If tmux cannot be listed during a
 poll, that round simply has no answer; only a session that tmux positively no
 longer reports counts as closed.
 
+Waiting reports on **every** poll, not only when something changes. The first
+real shutdown took four minutes on its last FirstMate — which was doing exactly
+what it had been asked, stopping servers and unwinding supervision — and a
+screen that stands still for four minutes reads as a hung shutdown rather than a
+patient one. The headline therefore names what is being waited for, how long it
+has taken, and how much grace is left. The control log and the CLI keep their
+own cadence: every change, plus a heartbeat, instead of a line per second.
+
 ## 5. Where it lives
 
 | Piece | File |

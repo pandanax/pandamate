@@ -300,6 +300,8 @@ async function shutdownAllCommand(): Promise<void> {
   if (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds < 1) {
     usage();
   }
+  let lastPhase = "";
+  let lastPrintedAt = 0;
   const report = await shutdownFleet({
     tmux: new TmuxClient(
       config.tmuxSocketName ? { socketName: config.tmuxSocketName } : {},
@@ -308,9 +310,18 @@ async function shutdownAllCommand(): Promise<void> {
     graceMilliseconds: timeoutSeconds * 1_000,
     force: !args.includes("--no-force"),
     onProgress: (progress) => {
-      if (!json) {
-        process.stdout.write(`${progress.headline}\n`);
+      // Waiting reports once a second so a screen can tick; a terminal only
+      // needs enough of them to show the shutdown is still alive.
+      const now = Date.now();
+      if (
+        json ||
+        (progress.phase === lastPhase && now - lastPrintedAt < 15_000)
+      ) {
+        return;
       }
+      lastPhase = progress.phase;
+      lastPrintedAt = now;
+      process.stdout.write(`${progress.headline}\n`);
     },
   });
   const windows = args.includes("--keep-windows")

@@ -197,6 +197,7 @@ test("FirstMates that close themselves are never killed, and foreign sessions ar
 test("a FirstMate that outlasts the grace period is stopped", async () => {
   const server = new FakeTmuxServer(["firstmate-mandala"]);
   const tmux = new TmuxClient({ runner: server });
+  const progress: FleetShutdownReport[] = [];
   let clock = 0;
 
   const report = await shutdownFleet({
@@ -207,7 +208,20 @@ test("a FirstMate that outlasts the grace period is stopped", async () => {
       clock += milliseconds;
     },
     now: () => clock,
+    onProgress: (value) => progress.push(value),
   });
+
+  // Waiting reports on every poll, naming what it waits for and how long is
+  // left, so a shutdown that takes minutes never looks like one that hung.
+  const waiting = progress.filter((value) =>
+    value.headline.startsWith("Waiting for"),
+  );
+  assert.equal(waiting.length, 5);
+  assert.equal(
+    waiting[0]?.headline,
+    "Waiting for firstmate-mandala · 0s elapsed · 0s before Pandamate stops them",
+  );
+  assert.match(waiting.at(-1)?.headline ?? "", /firstmate-mandala/);
 
   assert.deepEqual(
     report.sessions.map((step) => [step.session, step.outcome]),

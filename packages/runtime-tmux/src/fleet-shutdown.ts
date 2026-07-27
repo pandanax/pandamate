@@ -93,6 +93,12 @@ function message(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).slice(0, 200);
 }
 
+function formatDuration(milliseconds: number): string {
+  const seconds = Math.max(0, Math.round(milliseconds / 1_000));
+  const minutes = Math.floor(seconds / 60);
+  return minutes === 0 ? `${seconds}s` : `${minutes}m ${seconds % 60}s`;
+}
+
 export function planFleetShutdown(
   sessions: readonly DiscoveredTmuxSession[],
 ): FleetSessionPlan {
@@ -225,29 +231,33 @@ export async function shutdownFleet(
     publish();
   }
 
-  const deadline = now() + graceMilliseconds;
+  const startedAt = now();
+  const deadline = startedAt + graceMilliseconds;
   while (stillRunning().length > 0 && now() < deadline) {
     await sleep(pollMilliseconds);
     const live = liveSessionNames(tmux);
-    if (!live) {
-      continue;
-    }
-    let changed = false;
-    for (const session of stillRunning()) {
-      if (!live.has(session)) {
+    for (const session of live ? stillRunning() : []) {
+      if (!live?.has(session)) {
         record(session, "closed", "Closed itself gracefully");
-        changed = true;
       }
     }
-    if (changed) {
-      const remaining = stillRunning().length;
-      publish(
-        "firstmates",
-        remaining === 0
-          ? "Every FirstMate closed itself."
-          : `Waiting for ${remaining} FirstMate${remaining === 1 ? "" : "s"} to finish…`,
-      );
-    }
+    // Every poll reports, not only the ones that change something: a FirstMate
+    // dismissing a crew and unmounting a workspace takes minutes, and a screen
+    // that stands still for minutes reads as a hung shutdown rather than a
+    // patient one. The elapsed and remaining times are the proof it is alive.
+    const waiting = stillRunning();
+    publish(
+      "firstmates",
+      waiting.length === 0
+        ? "Every FirstMate closed itself."
+        : `${
+            waiting.length === 1
+              ? `Waiting for ${waiting[0]}`
+              : `Waiting for ${waiting.length} FirstMates`
+          } · ${formatDuration(now() - startedAt)} elapsed · ${formatDuration(
+            deadline - now(),
+          )} before Pandamate stops them`,
+    );
   }
 
   // One last look before forcing anything: a FirstMate can close between the
@@ -276,7 +286,15 @@ export async function shutdownFleet(
     }
   }
   if (plan.firstMates.length > 0) {
-    publish();
+    const stopped = [...steps.values()].filter(
+      (step) => step.outcome === "forced",
+    ).length;
+    publish(
+      "firstmates",
+      stopped === 0
+        ? "Every FirstMate closed itself."
+        : `Stopped ${stopped} FirstMate${stopped === 1 ? "" : "s"} that did not finish in time.`,
+    );
   }
 
   if (options.daemon) {

@@ -354,8 +354,21 @@ function reloadOwnPane(): void {
   tmux.run(["respawn-pane", "-k", "-t", pane, process.execPath, entryPath]);
 }
 
+let lastLoggedShutdown = "";
+let lastShutdownLogAt = 0;
+
 function sendShutdownProgress(report: FleetShutdownReport): void {
-  logControl("shutdown.progress", `${report.phase} ${report.headline}`);
+  // The screen ticks every second; the log keeps what a later diagnosis needs —
+  // every change, and a heartbeat through the long waits in between.
+  const signature = `${report.phase} ${report.sessions
+    .map((step) => `${step.session}=${step.outcome}`)
+    .join(",")}`;
+  const now = Date.now();
+  if (signature !== lastLoggedShutdown || now - lastShutdownLogAt >= 30_000) {
+    lastLoggedShutdown = signature;
+    lastShutdownLogAt = now;
+    logControl("shutdown.progress", `${report.phase} ${report.headline}`);
+  }
   if (child.connected) {
     const progress: TuiShutdownProgress = {
       type: "shutdown.progress",
