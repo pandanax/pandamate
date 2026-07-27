@@ -40,10 +40,10 @@ function session_id() {
 }
 
 function wait_for_tui() {
-  local session="$1"
+  local target="$1"
   local attempt=0
   while (( attempt < 50 )); do
-    if "$TMUX" capture-pane -p -t "$session" 2>/dev/null |
+    if "$TMUX" capture-pane -p -t "$target" 2>/dev/null |
       /usr/bin/grep -q "PANDAMATE"; then
       return 0
     fi
@@ -53,13 +53,31 @@ function wait_for_tui() {
   return 1
 }
 
+# Home also carries FirstMate tabs linked in from their own sessions. Targeting
+# a bare session id would hit whichever tab is selected, so respawning the TUI
+# that way killed the FirstMate living in it. The base window is the one this
+# launcher owns: named `home`, otherwise the first window not linked from a
+# FirstMate session. Empty when only FirstMate tabs are left.
+function base_window() {
+  local session="$1"
+  "$TMUX" list-windows -t "$session" \
+    -F '#{window_id}|#{window_linked}|#{window_name}' 2>/dev/null |
+    /usr/bin/awk -F'|' '
+      {
+        if ($3 == "home" && home == "") home = $1
+        if ($2 == 0 && plain == "") plain = $1
+      }
+      END { print (home != "" ? home : plain) }
+    '
+}
+
 function ensure_session() {
   local name="$1"
   local command="$2"
   local session
   session="$(session_id "$name")"
   if [[ -z "$session" ]]; then
-    if ! "$TMUX" new-session -d -s "$name" "$command"; then
+    if ! "$TMUX" new-session -d -s "$name" -n home "$command"; then
       show_error "tmux could not create $name. See $LOG"
       exit 1
     fi
@@ -85,35 +103,51 @@ fi
 
 session="$(session_id "$SESSION_NAME")"
 if [[ -n "$session" ]]; then
-  "$TMUX" set-option -w -t "$session" remain-on-exit on
-  if ! "$TMUX" respawn-pane -k -t "$session" "$TUI_COMMAND"; then
-    show_error "tmux could not refresh $SESSION_NAME. See $LOG"
-    exit 1
+  home_window="$(base_window "$session")"
+  if [[ -z "$home_window" ]]; then
+    # Only FirstMate tabs left — the Home window was closed. Take index 0 back
+    # instead of respawning into somebody else's FirstMate.
+    home_window="$(
+      "$TMUX" new-window -d -t "$session:0" -n home -P -F '#{window_id}' \
+        "$TUI_COMMAND"
+    )"
+  else
+    "$TMUX" set-option -w -t "$home_window" remain-on-exit on
+    if ! "$TMUX" respawn-pane -k -t "$home_window" "$TUI_COMMAND"; then
+      show_error "tmux could not refresh $SESSION_NAME. See $LOG"
+      exit 1
+    fi
+    "$TMUX" set-option -w -t "$home_window" remain-on-exit off
   fi
-  "$TMUX" set-option -w -t "$session" remain-on-exit off
+  "$TMUX" set-window-option -t "$home_window" automatic-rename off
+  "$TMUX" rename-window -t "$home_window" home
+  "$TMUX" select-window -t "$home_window"
 else
   session="$(ensure_session "$SESSION_NAME" "$TUI_COMMAND")"
+  home_window="$(base_window "$session")"
 fi
 
-if [[ -z "$session" ]]; then
+if [[ -z "$session" || -z "$home_window" ]]; then
   show_error "Pandamate tmux session was not found after launch. See $LOG"
   exit 1
 fi
 
 write_session="$(session_id "$WRITE_SESSION_NAME")"
 if [[ -n "$write_session" ]]; then
-  "$TMUX" set-option -w -t "$write_session" remain-on-exit on
-  if ! "$TMUX" respawn-pane -k -t "$write_session" "$TUI_COMMAND"; then
+  write_window="$(base_window "$write_session")"
+  "$TMUX" set-option -w -t "$write_window" remain-on-exit on
+  if ! "$TMUX" respawn-pane -k -t "$write_window" "$TUI_COMMAND"; then
     show_error "tmux could not refresh $WRITE_SESSION_NAME. See $LOG"
     exit 1
   fi
-  "$TMUX" set-option -w -t "$write_session" remain-on-exit off
+  "$TMUX" set-option -w -t "$write_window" remain-on-exit off
 else
   write_session="$(ensure_session "$WRITE_SESSION_NAME" "$TUI_COMMAND")"
+  write_window="$(base_window "$write_session")"
 fi
-if [[ -n "$write_session" ]] && wait_for_tui "$write_session"; then
-  "$TMUX" send-keys -t "$write_session" Escape
-  "$TMUX" send-keys -t "$write_session" i
+if [[ -n "$write_window" ]] && wait_for_tui "$write_window"; then
+  "$TMUX" send-keys -t "$write_window" Escape
+  "$TMUX" send-keys -t "$write_window" i
 fi
 
 idle_probe_session="$(session_id "$IDLE_PROBE_SESSION_NAME")"
@@ -128,11 +162,11 @@ if [[ -z "$idle_probe_session" ]]; then
 fi
 print -r -- "$(date -u +%Y-%m-%dT%H:%M:%SZ) launcher.services write=$write_session idle_probe=$idle_probe_session"
 
-if ! wait_for_tui "$session"; then
+if ! wait_for_tui "$home_window"; then
   show_error "Pandamate Home did not render in time. See $LOG"
   exit 1
 fi
-"$TMUX" send-keys -t "$session" Escape
+"$TMUX" send-keys -t "$home_window" Escape
 
 /usr/bin/osascript - "$TMUX" "$session" <<'APPLESCRIPT'
 on run argv

@@ -23,6 +23,7 @@ import {
   type ResponseData,
 } from "@pandamate/protocol";
 import {
+  controlTabForSession,
   discoverTmuxSessions,
   openSessionInNewITermWindow,
   requestFirstMateReset,
@@ -410,9 +411,21 @@ child.on("message", async (value: unknown) => {
         if (!response.ok) {
           throw new Error(response.error.message);
         }
-      } else {
-        openSessionInNewITermWindow(tmux, request.sessionName);
+        // FirstMates open as tabs of this very window, so name the tab the user
+        // has just been switched to rather than promising a new window.
+        const tab = controlTabForSession(tmux, request.sessionName);
+        sendResult({
+          type: "action.result",
+          action: request.action,
+          sessionName: request.sessionName,
+          success: true,
+          message: tab
+            ? `${request.sessionName} is Pandamate Home tab ${tab.index} "${tab.name}" — switch with tmux prefix + ${tab.index}.`
+            : `Opened ${request.sessionName} as a Pandamate Home tab.`,
+        });
+        return;
       }
+      openSessionInNewITermWindow(tmux, request.sessionName);
       sendResult({
         type: "action.result",
         action: request.action,

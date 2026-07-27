@@ -482,7 +482,9 @@ function projectPanel(project: ProjectSummary, screen: Screen) {
             gap: 1,
           },
           Text({
-            content: "[o] Open in a new iTerm window",
+            content: project.profile
+              ? "[o] Open as a tab of this Pandamate window"
+              : "[o] Open in a new iTerm window",
             fg: project.sessionName ? colors.cyan : colors.muted,
           }),
           Text({

@@ -5,6 +5,7 @@ import {
   attachCommandForSessionId,
   discoverTmuxSessions,
   closeControlTab,
+  controlTabForSession,
   isPandamateControlSession,
   openSessionAsControlTab,
   openSessionInNewITermWindow,
@@ -293,7 +294,7 @@ function tabTmux(
   const calls: string[][] = [];
   const responses = new Map<string, string>([
     ["display-message -p -t $9:0 #{window_id}", windowId],
-    ["list-windows -t $4 -F #{window_index}|#{window_id}", controlWindows],
+    ["list-windows -t $4 -F #{window_index}|#{window_id}|#{window_name}", controlWindows],
   ]);
   return {
     calls,
@@ -310,13 +311,19 @@ function tabTmux(
 }
 
 test("links a FirstMate window as a fresh Pandamate home tab and shows tabs", () => {
-  const tmux = tabTmux("@7", "0|@1");
+  const tmux = tabTmux("@7", "0|@1|home");
   const result = openSessionAsControlTab(tmux, "firstmate-mandala");
 
   assert.equal(result, "$9");
   assert.deepEqual(tmux.calls, [
     ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
-    ["list-windows", "-t", "$4", "-F", "#{window_index}|#{window_id}"],
+    [
+      "list-windows",
+      "-t",
+      "$4",
+      "-F",
+      "#{window_index}|#{window_id}|#{window_name}",
+    ],
     ["link-window", "-s", "$9:0", "-t", "$4:1"],
     ["set-window-option", "-t", "$4:1", "automatic-rename", "off"],
     ["rename-window", "-t", "$4:1", "mandala"],
@@ -326,20 +333,44 @@ test("links a FirstMate window as a fresh Pandamate home tab and shows tabs", ()
 });
 
 test("re-opening an already linked project just selects its existing tab", () => {
-  const tmux = tabTmux("@7", "0|@1\n1|@7");
+  const tmux = tabTmux("@7", "0|@1|home\n1|@7|mandala");
   const result = openSessionAsControlTab(tmux, "firstmate-mandala");
 
   assert.equal(result, "$9");
   assert.deepEqual(tmux.calls, [
     ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
-    ["list-windows", "-t", "$4", "-F", "#{window_index}|#{window_id}"],
+    [
+      "list-windows",
+      "-t",
+      "$4",
+      "-F",
+      "#{window_index}|#{window_id}|#{window_name}",
+    ],
     ["set-option", "-t", "$4", "status", "on"],
     ["select-window", "-t", "$4:1"],
   ]);
 });
 
+test("names the home tab a FirstMate occupies, and reports none when unlinked", () => {
+  assert.deepEqual(
+    controlTabForSession(
+      tabTmux("@7", "0|@1|home\n1|@7|mandala"),
+      "firstmate-mandala",
+    ),
+    { index: 1, name: "mandala" },
+  );
+  assert.equal(
+    controlTabForSession(tabTmux("@7", "0|@1|home"), "firstmate-mandala"),
+    null,
+  );
+  assert.equal(
+    controlTabForSession(tabTmux("@7", "0|@1|home"), "firstmate-gone"),
+    null,
+  );
+});
+
 test("refuses to open control sessions or non-project sessions as tabs", () => {
-  const tmux = tabTmux("@7", "0|@1");
+  const tmux = tabTmux("@7", "0|@1|home");
   assert.throws(() => openSessionAsControlTab(tmux, "pandamate:home"));
   assert.throws(() => openSessionAsControlTab(tmux, "randomsession"));
   assert.deepEqual(tmux.calls, []);
@@ -353,7 +384,7 @@ function closeTmux(
   const calls: string[][] = [];
   const responses = new Map<string, string>([
     ["display-message -p -t $9:0 #{window_id}", windowId],
-    ["list-windows -t $4 -F #{window_index}|#{window_id}", controlWindows],
+    ["list-windows -t $4 -F #{window_index}|#{window_id}|#{window_name}", controlWindows],
   ]);
   return {
     calls,
@@ -380,13 +411,19 @@ function closeTmux(
 }
 
 test("closing the last project tab unlinks it and restores clean home", () => {
-  const tmux = closeTmux("@7", "0|@1\n1|@7");
+  const tmux = closeTmux("@7", "0|@1|home\n1|@7|mandala");
   const closed = closeControlTab(tmux, "firstmate-mandala");
 
   assert.equal(closed, true);
   assert.deepEqual(tmux.calls, [
     ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
-    ["list-windows", "-t", "$4", "-F", "#{window_index}|#{window_id}"],
+    [
+      "list-windows",
+      "-t",
+      "$4",
+      "-F",
+      "#{window_index}|#{window_id}|#{window_name}",
+    ],
     ["unlink-window", "-t", "$4:1"],
     ["set-option", "-t", "$4", "status", "off"],
     ["select-window", "-t", "$4:0"],
@@ -394,31 +431,43 @@ test("closing the last project tab unlinks it and restores clean home", () => {
 });
 
 test("closing one of several tabs keeps the tab strip and returns home", () => {
-  const tmux = closeTmux("@7", "0|@1\n1|@7\n2|@9");
+  const tmux = closeTmux("@7", "0|@1|home\n1|@7|mandala\n2|@9|zeta");
   const closed = closeControlTab(tmux, "firstmate-mandala");
 
   assert.equal(closed, true);
   assert.deepEqual(tmux.calls, [
     ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
-    ["list-windows", "-t", "$4", "-F", "#{window_index}|#{window_id}"],
+    [
+      "list-windows",
+      "-t",
+      "$4",
+      "-F",
+      "#{window_index}|#{window_id}|#{window_name}",
+    ],
     ["unlink-window", "-t", "$4:1"],
     ["select-window", "-t", "$4:0"],
   ]);
 });
 
 test("closing a project that is not currently a tab is a no-op", () => {
-  const tmux = closeTmux("@7", "0|@1");
+  const tmux = closeTmux("@7", "0|@1|home");
   const closed = closeControlTab(tmux, "firstmate-mandala");
 
   assert.equal(closed, false);
   assert.deepEqual(tmux.calls, [
     ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
-    ["list-windows", "-t", "$4", "-F", "#{window_index}|#{window_id}"],
+    [
+      "list-windows",
+      "-t",
+      "$4",
+      "-F",
+      "#{window_index}|#{window_id}|#{window_name}",
+    ],
   ]);
 });
 
 test("closing a tab when home is not running is a safe no-op", () => {
-  const tmux = closeTmux("@7", "0|@1", { homeMissing: true });
+  const tmux = closeTmux("@7", "0|@1|home", { homeMissing: true });
   const closed = closeControlTab(tmux, "firstmate-mandala");
 
   assert.equal(closed, false);
@@ -426,7 +475,7 @@ test("closing a tab when home is not running is a safe no-op", () => {
 });
 
 test("close refuses control sessions and non-project sessions", () => {
-  const tmux = closeTmux("@7", "0|@1");
+  const tmux = closeTmux("@7", "0|@1|home");
   assert.throws(() => closeControlTab(tmux, "pandamate:home"));
   assert.throws(() => closeControlTab(tmux, "randomsession"));
   assert.deepEqual(tmux.calls, []);

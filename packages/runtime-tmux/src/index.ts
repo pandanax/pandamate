@@ -507,6 +507,7 @@ export function openSessionInNewITermWindow(
 interface ControlWindow {
   readonly index: number;
   readonly id: string;
+  readonly name: string;
 }
 
 function listControlWindows(
@@ -518,22 +519,59 @@ function listControlWindows(
     "-t",
     controlSessionId,
     "-F",
-    `#{window_index}${fieldSeparator}#{window_id}`,
+    `#{window_index}${fieldSeparator}#{window_id}${fieldSeparator}#{window_name}`,
   ]);
   if (rows === "") {
     return [];
   }
   return rows.split("\n").map((row) => {
-    const [index, id] = splitRow(row, 2) ?? [];
-    if (index === undefined || id === undefined) {
+    const [index, id, name] = splitRow(row, 3) ?? [];
+    if (index === undefined || id === undefined || !name) {
       throw new Error(`Malformed tmux window row: ${row}`);
     }
     const parsedIndex = Number(index);
     if (!Number.isSafeInteger(parsedIndex) || parsedIndex < 0) {
       throw new Error(`Invalid tmux window index: ${index}`);
     }
-    return { index: parsedIndex, id: validateStableWindowId(id) };
+    return { index: parsedIndex, id: validateStableWindowId(id), name };
   });
+}
+
+export interface ControlTab {
+  readonly index: number;
+  readonly name: string;
+}
+
+/**
+ * Which Pandamate home tab a FirstMate currently occupies, so the UI can name
+ * the tab the user should switch to instead of vaguely claiming a window was
+ * opened. Null when home is not running, the project session is gone, or the
+ * project has no tab.
+ */
+export function controlTabForSession(
+  tmux: Pick<TmuxClient, "run" | "resolveSession">,
+  sessionName: string,
+): ControlTab | null {
+  let controlSessionId: string;
+  let projectWindowId: string;
+  try {
+    controlSessionId = tmux.resolveSession(targetForPandamateService("home"));
+    projectWindowId = validateStableWindowId(
+      tmux.run([
+        "display-message",
+        "-p",
+        "-t",
+        `${tmux.resolveSession(sessionName)}:0`,
+        "#{window_id}",
+      ]),
+    );
+  } catch {
+    return null;
+  }
+  const tab = listControlWindows(tmux, controlSessionId).find(
+    (window) => window.id === projectWindowId,
+  );
+  return tab ? { index: tab.index, name: tab.name } : null;
 }
 
 /**
