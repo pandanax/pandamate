@@ -60,6 +60,20 @@ Phase 1 has a working vertical slice:
   project identity survives the runtime session; `r` asks a running FirstMate
   to gracefully stop its current crew and then deploy Watcher and service
   windows again without closing the main pane.
+- `X` closes all of Pandamate, gracefully, in one action — `pandamate
+  shutdown-all` does the same headlessly. The daemon is drained first (`system.
+  drain`: supervision pauses and every project is durably marked stopped, so
+  nothing is relaunched now and nothing returns by itself later), every
+  `firstmate-*` session is then asked to shut itself down — crew dismissed,
+  worktrees released, Arcadia workspaces unmounted, its own session closed last
+  — and Pandamate waits for each one, forcing only what outlasts
+  `PANDAMATE_SHUTDOWN_GRACE_MS` (five minutes by default). The daemon stops next,
+  and `pandamate:*` windows close last with `pandamate:home` at the very end,
+  since that is the window the shutdown itself runs in. tmux sessions outside
+  the `firstmate-*` and `pandamate:*` namespaces are never touched, only
+  reported. A live progress screen shows each session as it closes; a report
+  says `forced` only when Pandamate really killed something. Full record:
+  [docs/17-full-shutdown.md](docs/17-full-shutdown.md).
 - a project's Watcher is deployed by the supervisor, not asked for in a prompt.
   A workspace that declares one — executable `.pandamate/watch`,
   `firstmate/bin/fm-watch`, or `bin/fm-watch` — gets it as window `watch` of its

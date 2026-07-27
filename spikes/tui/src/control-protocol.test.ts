@@ -5,6 +5,7 @@ import {
   parseTuiActionRequest,
   parseTuiActionResult,
   parseTuiProjectionUpdate,
+  parseTuiShutdownProgress,
 } from "./control-protocol.ts";
 
 test("control protocol rejects Pandamate control-plane targets", () => {
@@ -120,4 +121,61 @@ test("control protocol validates live projection updates", () => {
       events: [],
     }),
   );
+});
+
+test("a full shutdown is requested without a session and carries no target", () => {
+  assert.deepEqual(
+    parseTuiActionRequest({
+      type: "action.request",
+      action: "pandamate.shutdown-all",
+    }),
+    { type: "action.request", action: "pandamate.shutdown-all" },
+  );
+  assert.deepEqual(
+    parseTuiActionResult({
+      type: "action.result",
+      action: "pandamate.shutdown-all",
+      success: false,
+      message: "Pandamate could not close itself.",
+    }),
+    {
+      type: "action.result",
+      action: "pandamate.shutdown-all",
+      success: false,
+      message: "Pandamate could not close itself.",
+    },
+  );
+});
+
+test("shutdown progress is validated before it reaches the screen", () => {
+  const progress = parseTuiShutdownProgress({
+    type: "shutdown.progress",
+    phase: "firstmates",
+    headline: "Waiting for 1 FirstMate to finish…",
+    sessions: [
+      {
+        session: "firstmate-mandala",
+        outcome: "requested",
+        detail: "Shutdown sent to window 0 ($1:@2.%3)",
+      },
+    ],
+    foreign: ["work"],
+  });
+  assert.equal(progress.phase, "firstmates");
+  assert.equal(progress.sessions[0]?.outcome, "requested");
+  assert.deepEqual(progress.foreign, ["work"]);
+
+  for (const invalid of [
+    { type: "shutdown.progress", phase: "unknown", headline: "", sessions: [], foreign: [] },
+    {
+      type: "shutdown.progress",
+      phase: "closed",
+      headline: "done",
+      sessions: [{ session: "firstmate-mandala", outcome: "vanished", detail: "" }],
+      foreign: [],
+    },
+    { type: "shutdown.progress", phase: "closed", headline: "done", sessions: [], foreign: [42] },
+  ]) {
+    assert.throws(() => parseTuiShutdownProgress(invalid));
+  }
 });

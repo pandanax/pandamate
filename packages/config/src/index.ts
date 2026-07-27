@@ -19,6 +19,7 @@ export interface PandamateConfig {
   readonly fakeFirstMateEntry: string | undefined;
   readonly reconcileIntervalMs: number;
   readonly heartbeatStaleMs: number;
+  readonly shutdownGraceMs: number;
   readonly watcherRestartBackoffMs: number;
 }
 
@@ -131,6 +132,15 @@ export function loadConfig(
       5_000,
       250,
       300_000,
+    ),
+    // How long a full shutdown lets each FirstMate take over its own teardown —
+    // dismissing a crew and unmounting an Arcadia workspace is minutes of real
+    // work — before Pandamate stops what is left.
+    shutdownGraceMs: boundedMilliseconds(
+      "PANDAMATE_SHUTDOWN_GRACE_MS",
+      300_000,
+      1_000,
+      3_600_000,
     ),
     // How long a redeployed Watcher must stay up before the supervisor treats
     // it as healthy again, and therefore the slowest a broken one can respawn.

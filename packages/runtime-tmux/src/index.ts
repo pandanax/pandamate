@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { isAbsolute, normalize } from "node:path";
 
+export * from "./fleet-shutdown.ts";
+
 const slugPattern = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const stablePaneIdPattern = /^\$\d+:@\d+\.%\d+$/;
 const stableSessionIdPattern = /^\$\d+$/;
@@ -430,6 +432,13 @@ export function discoverTmuxSessions(
     "-F",
     `#{session_id}${fieldSeparator}#{session_attached}${fieldSeparator}#{session_windows}${fieldSeparator}#{session_name}`,
   ]);
+  // A running tmux server with no sessions left answers with nothing at all,
+  // which is an empty fleet rather than mangled evidence. It is the state a
+  // full shutdown ends in, and the state reconciliation runs in until the
+  // first project starts.
+  if (sessionRows === "") {
+    return [];
+  }
   for (const row of sessionRows.split("\n")) {
     const [id, attached, windows, name] = splitRow(row, 4) ?? [];
     if (!id || !name || attached === undefined || windows === undefined) {

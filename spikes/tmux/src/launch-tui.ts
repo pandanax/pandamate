@@ -8,7 +8,7 @@ import {
   buildBrainBriefing,
   PandamateBrain,
 } from "@pandamate/agent-sdk";
-import { requestDaemon } from "@pandamate/client";
+import { daemonLifecycle, requestDaemon } from "@pandamate/client";
 import { loadConfig } from "@pandamate/config";
 import {
   buildProjectOnboarding,
@@ -23,18 +23,22 @@ import {
   type ResponseData,
 } from "@pandamate/protocol";
 import {
+  closePandamateSessions,
   configureControlStatusBar,
   controlTabForSession,
   discoverTmuxSessions,
   openSessionInNewITermWindow,
   requestFirstMateReset,
   requestGracefulSessionShutdown,
+  shutdownFleet,
   TmuxClient,
+  type FleetShutdownReport,
 } from "@pandamate/runtime-tmux";
 
 import {
   parseTuiActionRequest,
   type TuiActionResult,
+  type TuiShutdownProgress,
 } from "../../tui/src/control-protocol.ts";
 import type {
   EventSummary,
@@ -350,6 +354,69 @@ function reloadOwnPane(): void {
   tmux.run(["respawn-pane", "-k", "-t", pane, process.execPath, entryPath]);
 }
 
+function sendShutdownProgress(report: FleetShutdownReport): void {
+  logControl("shutdown.progress", `${report.phase} ${report.headline}`);
+  if (child.connected) {
+    const progress: TuiShutdownProgress = {
+      type: "shutdown.progress",
+      phase: report.phase,
+      headline: report.headline,
+      sessions: report.sessions,
+      foreign: report.foreign,
+    };
+    child.send(progress);
+  }
+}
+
+/**
+ * Close all of Pandamate from the one process that can: this launcher owns the
+ * tmux client and lives inside `pandamate:home`, so it can drive every step and
+ * then end the window it runs in. FirstMates go first and gracefully, the
+ * daemon second, Pandamate's own windows last — which is where this process
+ * stops existing, so nothing may be scheduled after it.
+ */
+async function closeAllOfPandamate(): Promise<void> {
+  clearInterval(refreshTimer);
+  try {
+    const report = await shutdownFleet({
+      tmux,
+      daemon: daemonLifecycle(config.socketPath),
+      graceMilliseconds: config.shutdownGraceMs,
+      onProgress: sendShutdownProgress,
+    });
+    if (report.phase === "failed") {
+      return;
+    }
+    sendShutdownProgress({
+      ...report,
+      phase: "windows",
+      headline: "Closing Pandamate's own windows…",
+    });
+    // The last frame has to reach the TUI before its window is destroyed.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const teardown = closePandamateSessions(tmux);
+    // Only reached when home was not running: report and stay available.
+    sendShutdownProgress({
+      ...report,
+      phase: "closed",
+      headline:
+        teardown.closed.length === 0
+          ? "No Pandamate windows were open."
+          : `Closed ${teardown.closed.join(", ")}.`,
+    });
+  } catch (error) {
+    sendShutdownProgress({
+      phase: "failed",
+      headline:
+        error instanceof Error
+          ? error.message
+          : "Pandamate could not close itself.",
+      sessions: [],
+      foreign: [],
+    });
+  }
+}
+
 let refreshInProgress = false;
 let eventCursor = events.at(-1)?.sequence ?? 0;
 let lastProjectionJson = JSON.stringify({ projects, services, events });
@@ -429,6 +496,11 @@ child.on("message", async (value: unknown) => {
           error instanceof Error ? error.message : "Pandamate could not reload.",
       });
     }
+    return;
+  }
+
+  if (request.action === "pandamate.shutdown-all") {
+    await closeAllOfPandamate();
     return;
   }
 

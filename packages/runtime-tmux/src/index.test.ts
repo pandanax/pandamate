@@ -251,6 +251,13 @@ test("reports mangled session rows instead of a missing session", () => {
   );
 });
 
+test("reads a server with no sessions left as an empty fleet", () => {
+  assert.deepEqual(
+    discoverTmuxSessions(new TmuxClient({ runner: new RecordingRunner([""]) })),
+    [],
+  );
+});
+
 test("rejects malformed discovery evidence", () => {
   const unknownPane = new RecordingRunner([
     "$1|0|1|alpha",

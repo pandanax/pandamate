@@ -130,3 +130,22 @@ test("validates bounded mailbox requests", () => {
     }),
   );
 });
+
+test("parses a drain request and rejects one without a decision", () => {
+  const drain = parseRequest({
+    protocol: 1,
+    requestId: "req-drain",
+    type: "system.drain",
+    payload: { draining: true },
+  });
+  assert.equal(drain.type, "system.drain");
+  assert.deepEqual(drain.payload, { draining: true });
+  assert.throws(() =>
+    parseRequest({
+      protocol: 1,
+      requestId: "req-drain-bad",
+      type: "system.drain",
+      payload: { draining: "yes" },
+    }),
+  );
+});

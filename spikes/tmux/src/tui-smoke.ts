@@ -50,9 +50,13 @@ try {
   if (!wide.includes("LIVE ACTIVITY") || !wide.includes("SELECTED: MANDALA")) {
     throw new Error("Wide TUI frame is missing required panels");
   }
+  // At this width a Fleet row shows only the first word of a project name, so
+  // the injected "Live Project" is matched by its name's first word together
+  // with the one state no demo project is in.
   await waitFor(
     () =>
-      tmux.capturePane(tui).includes("Live Project") &&
+      tmux.capturePane(tui).includes("Live") &&
+      tmux.capturePane(tui).includes("starting") &&
       tmux.capturePane(tui).includes("PANDAMATE SERVICES") &&
       tmux.capturePane(tui).includes("write"),
     "a live IPC projection update in the already-open Fleet",
@@ -125,6 +129,44 @@ try {
     "keyboard selection inside tmux",
   );
 
+  const sendKey = (key: string): void => {
+    tmux.run(["send-keys", "-t", tmux.resolveSession(tui), "-l", key]);
+  };
+  sendKey("X");
+  await waitFor(
+    () =>
+      tmux.capturePane(tui).includes("CONFIRM FULL PANDAMATE SHUTDOWN") &&
+      tmux.capturePane(tui).includes("left alone"),
+    "the full shutdown confirmation",
+  );
+  sendKey("n");
+  await waitFor(
+    () => tmux.capturePane(tui).includes("Full shutdown cancelled."),
+    "a cancelled full shutdown returning Home",
+  );
+  sendKey("X");
+  await waitFor(
+    () => tmux.capturePane(tui).includes("CONFIRM FULL PANDAMATE SHUTDOWN"),
+    "the full shutdown confirmation a second time",
+  );
+  sendKey("y");
+  await waitFor(
+    () =>
+      tmux.capturePane(tui).includes("CLOSING PANDAMATE") &&
+      tmux.capturePane(tui).includes("firstmate-live-project") &&
+      tmux.capturePane(tui).includes("Left untouched: work"),
+    "live shutdown progress pushed by the host",
+  );
+  await waitFor(
+    () => tmux.capturePane(tui).includes("Smoke fixture: the shutdown stops here."),
+    "a failed shutdown reported on screen",
+  );
+  tmux.run(["send-keys", "-t", tmux.resolveSession(tui), "Escape"]);
+  await waitFor(
+    () => tmux.capturePane(tui).includes("LIVE ACTIVITY"),
+    "return Home from a failed shutdown",
+  );
+
   tmux.sendLiteralKey(tui, "q");
   await waitFor(
     () => tmux.capturePane(tui).includes(cleanupMarker),
@@ -141,6 +183,7 @@ try {
       "live Fleet projection: PASS",
       "Fleet/services separation: PASS",
       "Pandamate services screen: PASS",
+      "full shutdown confirmation and live progress: PASS",
       "keyboard input: PASS",
       "alternate-screen cleanup: PASS",
       "tmux TUI smoke: PASS",

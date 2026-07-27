@@ -374,3 +374,87 @@ test("leaves a project without a declared Watcher and an adopted session alone",
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("a draining supervisor never relaunches a FirstMate that closed itself", () => {
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-drain-"));
+  try {
+    const workspace = join(directory, "bare");
+    mkdirSync(workspace);
+    const tmux = new FakeTmux();
+    tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
+    const store = new FakeStore([fixtureProject(workspace)]);
+    const supervisor = new FirstMateSupervisor({
+      config: fixtureConfig(directory),
+      store,
+      tmux,
+    });
+
+    supervisor.reconcileNow();
+    assert.equal(tmux.launches.length, 2);
+
+    // The last step of a graceful shutdown is the FirstMate closing its own
+    // session. Ordinary supervision would read that as a crash.
+    supervisor.setDraining(true);
+    assert.equal(supervisor.draining, true);
+    tmux.killSession("firstmate-fixture");
+    supervisor.reconcileNow();
+    supervisor.reconcileNow();
+
+    assert.equal(tmux.launches.length, 2);
+    assert.deepEqual(
+      tmux.sessions.map((session) => session.name),
+      ["pandamate:home"],
+    );
+    assert.equal(store.listProjects()[0]?.actualState, "stopped");
+    assert.equal(
+      store.listProjects()[0]?.currentSummary,
+      "Closed during a full Pandamate shutdown",
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("draining also suspends the kill a stopped project would normally get", () => {
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-drain-"));
+  try {
+    const workspace = join(directory, "bare");
+    mkdirSync(workspace);
+    const tmux = new FakeTmux();
+    tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
+    tmux.createDetachedInDirectory("firstmate-fixture", workspace, ["/bin/sh"]);
+    const store = new FakeStore([
+      {
+        ...fixtureProject(workspace),
+        desiredState: "stopped" as const,
+        actualState: "running" as const,
+        tmuxSessionName: "firstmate-fixture",
+      },
+    ]);
+    const supervisor = new FirstMateSupervisor({
+      config: fixtureConfig(directory),
+      store,
+      tmux,
+    });
+
+    // Mid-shutdown the FirstMate is still unmounting and dismissing its crew,
+    // so a desired stop must not turn into an immediate kill.
+    supervisor.setDraining(true);
+    supervisor.reconcileNow();
+    assert.deepEqual(
+      tmux.sessions.map((session) => session.name),
+      ["pandamate:home", "firstmate-fixture"],
+    );
+
+    // A daemon restart, or an explicit resume, brings ordinary supervision back.
+    supervisor.setDraining(false);
+    supervisor.reconcileNow();
+    assert.deepEqual(
+      tmux.sessions.map((session) => session.name),
+      ["pandamate:home"],
+    );
+    assert.equal(store.listProjects()[0]?.actualState, "stopped");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

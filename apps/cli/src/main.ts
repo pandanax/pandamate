@@ -6,6 +6,7 @@ import { isAbsolute, normalize } from "node:path";
 
 import {
   DaemonUnavailableError,
+  daemonLifecycle,
   requestDaemon,
 } from "@pandamate/client";
 import { loadConfig } from "@pandamate/config";
@@ -18,6 +19,11 @@ import {
   type ProjectKind,
 } from "@pandamate/domain";
 import { HookSpoolClient } from "@pandamate/firstmate-kit";
+import {
+  closePandamateSessions,
+  shutdownFleet,
+  TmuxClient,
+} from "@pandamate/runtime-tmux";
 import {
   protocolVersion,
   type Request,
@@ -39,6 +45,7 @@ function usage(): never {
   pandamate daemon start|stop|status
   pandamate status [--json]
   pandamate start|stop|restart|open|close-tab <project> [--json]
+  pandamate shutdown-all [--timeout <seconds>] [--no-force] [--keep-windows] [--json]
   pandamate send <project> <instruction...> [--priority normal|high|urgent] [--json]
   pandamate inbox list [project] [--json]
   pandamate inbox lease <project> <owner> [--json]
@@ -277,6 +284,55 @@ async function lifecycleCommand(
     project,
     `${project.slug} desired state: ${project.desiredState}; actual state: ${project.actualState}.\n`,
   );
+}
+
+/**
+ * Close all of Pandamate the way Panda would: every FirstMate is asked to shut
+ * itself down gracefully and given time to unmount, dismiss its crew, and clean
+ * up; only then does the daemon stop and Pandamate's own tmux windows go. Run
+ * from inside `pandamate:home` this ends the terminal it is typed into, which
+ * is the point — `--keep-windows` is the way to keep the home window.
+ */
+async function shutdownAllCommand(): Promise<void> {
+  const timeoutSeconds = Number(
+    optionValue("--timeout") ?? Math.round(config.shutdownGraceMs / 1_000),
+  );
+  if (!Number.isSafeInteger(timeoutSeconds) || timeoutSeconds < 1) {
+    usage();
+  }
+  const report = await shutdownFleet({
+    tmux: new TmuxClient(
+      config.tmuxSocketName ? { socketName: config.tmuxSocketName } : {},
+    ),
+    daemon: daemonLifecycle(config.socketPath),
+    graceMilliseconds: timeoutSeconds * 1_000,
+    force: !args.includes("--no-force"),
+    onProgress: (progress) => {
+      if (!json) {
+        process.stdout.write(`${progress.headline}\n`);
+      }
+    },
+  });
+  const windows = args.includes("--keep-windows")
+    ? { closed: [], failed: [] }
+    : closePandamateSessions(
+        new TmuxClient(
+          config.tmuxSocketName ? { socketName: config.tmuxSocketName } : {},
+        ),
+      );
+  output(
+    { ...report, windows },
+    `${report.sessions
+      .map((step) => `${step.session}: ${step.outcome} — ${step.detail}`)
+      .join("\n")}${report.sessions.length > 0 ? "\n" : ""}${
+      windows.closed.length > 0
+        ? `Closed Pandamate windows: ${windows.closed.join(", ")}\n`
+        : ""
+    }${report.headline}\n`,
+  );
+  if (report.phase === "failed") {
+    process.exitCode = 1;
+  }
 }
 
 async function projectCommand(): Promise<void> {
@@ -772,6 +828,9 @@ try {
     case "open":
     case "close-tab":
       await lifecycleCommand(args[0]);
+      break;
+    case "shutdown-all":
+      await shutdownAllCommand();
       break;
     case "project":
       await projectCommand();

@@ -26,6 +26,7 @@ test("derives bounded state and runtime files from overrides", () => {
       fakeFirstMateEntry: undefined,
       reconcileIntervalMs: 500,
       heartbeatStaleMs: 5000,
+      shutdownGraceMs: 300_000,
       watcherRestartBackoffMs: 10_000,
     },
   );

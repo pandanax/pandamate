@@ -23,8 +23,10 @@ import {
 import {
   parseTuiActionResult,
   parseTuiProjectionUpdate,
+  parseTuiShutdownProgress,
   type SessionTuiAction,
   type TuiActionRequest,
+  type TuiShutdownProgress,
 } from "./control-protocol.ts";
 
 type Screen =
@@ -35,7 +37,9 @@ type Screen =
   | "project"
   | "confirm-graceful"
   | "confirm-reset"
-  | "confirm-kill";
+  | "confirm-kill"
+  | "confirm-shutdown-all"
+  | "shutdown";
 
 const colors = {
   graphite: "#111417",
@@ -271,7 +275,11 @@ function header(model: DeckModel, mode: string) {
 function footer(screen: Screen, message: string | null) {
   const help =
     screen === "home"
-      ? "i write · s services · ↑↓/jk select · Enter project · e events · R reload · q quit"
+      ? "i write · s services · ↑↓/jk select · Enter project · e events · R reload · X close all · q quit"
+      : screen === "confirm-shutdown-all"
+        ? "y close all of Pandamate · n/Esc cancel"
+      : screen === "shutdown"
+        ? "Pandamate is closing itself down…"
       : screen === "input"
         ? "Enter send · ask anything or paste/drag a project folder · Esc cancel"
       : screen === "events"
@@ -396,6 +404,147 @@ function eventJournalPanel(
             Text({ content: `    ${event.detail}`, fg: colors.muted }),
           );
         })),
+  );
+}
+
+function shutdownConfirmPanel(model: DeckModel) {
+  const live = model.projects.filter(
+    (project) => project.sessionName !== null,
+  ).length;
+  const services = model.services.filter(
+    (service) => service.state === "running",
+  ).length;
+  return Box(
+    {
+      id: "confirm-shutdown-all",
+      title: " CONFIRM FULL PANDAMATE SHUTDOWN ",
+      borderStyle: "double",
+      borderColor: colors.coral,
+      backgroundColor: colors.panel,
+      flexDirection: "column",
+      flexGrow: 1,
+      padding: 2,
+      gap: 1,
+    },
+    Text({
+      content: `Close everything: ${live} live FirstMate${live === 1 ? "" : "s"} and ${services} Pandamate service${services === 1 ? "" : "s"}.`,
+      fg: colors.coral,
+    }),
+    Text({
+      content:
+        "1. Every FirstMate is asked to shut down gracefully — crew dismissed,",
+      fg: colors.softWhite,
+    }),
+    Text({
+      content:
+        "   worktrees released, Arcadia workspaces unmounted, state saved.",
+      fg: colors.softWhite,
+    }),
+    Text({
+      content: "2. Pandamate waits for each one, then stops the daemon.",
+      fg: colors.softWhite,
+    }),
+    Text({
+      content: "3. Service sessions close, and this window closes last.",
+      fg: colors.softWhite,
+    }),
+    Text({
+      content:
+        "tmux sessions outside the firstmate-* and pandamate:* namespaces are left alone.",
+      fg: colors.muted,
+    }),
+    Text({
+      content: "Press y to close all of Pandamate, or n / Esc to cancel.",
+      fg: colors.amber,
+    }),
+  );
+}
+
+const shutdownPhaseLabels = [
+  ["draining", "Drain the daemon"],
+  ["firstmates", "Close every FirstMate"],
+  ["daemon", "Stop the daemon"],
+  ["windows", "Close Pandamate windows"],
+] as const;
+
+function shutdownOutcomeGlyph(
+  outcome: TuiShutdownProgress["sessions"][number]["outcome"],
+): { readonly glyph: string; readonly color: string } {
+  switch (outcome) {
+    case "requested":
+      return { glyph: "◉", color: colors.amber };
+    case "closed":
+      return { glyph: "✓", color: colors.bamboo };
+    case "forced":
+      return { glyph: "⨯", color: colors.coral };
+    case "failed":
+      return { glyph: "!", color: colors.coral };
+    case "left-running":
+      return { glyph: "◐", color: colors.purple };
+  }
+}
+
+function shutdownPanel(progress: TuiShutdownProgress | null) {
+  const phase = progress?.phase ?? "draining";
+  const reached =
+    phase === "closed"
+      ? shutdownPhaseLabels.length
+      : shutdownPhaseLabels.findIndex(([name]) => name === phase);
+  return Box(
+    {
+      id: "shutdown-view",
+      title: " CLOSING PANDAMATE ",
+      borderStyle: "double",
+      borderColor: phase === "failed" ? colors.coral : colors.amber,
+      backgroundColor: colors.panel,
+      flexDirection: "column",
+      flexGrow: 1,
+      padding: 1,
+      gap: 1,
+    },
+    Text({
+      content: progress?.headline ?? "Starting the full shutdown…",
+      fg: phase === "failed" ? colors.coral : colors.softWhite,
+    }),
+    Box(
+      { flexDirection: "column" },
+          ...shutdownPhaseLabels.map(([, label], index) =>
+        Text({
+          content: `${index < reached ? "✓" : index === reached ? "›" : "·"} ${label}`,
+          fg:
+            index < reached
+              ? colors.bamboo
+              : index === reached
+                ? colors.cyan
+                : colors.muted,
+        }),
+      ),
+    ),
+    Box(
+      { flexDirection: "column", flexGrow: 1 },
+      ...(progress && progress.sessions.length > 0
+        ? progress.sessions.slice(0, 20).map((step) => {
+            const outcome = shutdownOutcomeGlyph(step.outcome);
+            return Text({
+              content: `${outcome.glyph} ${step.session}  ·  ${step.detail}`,
+              fg: outcome.color,
+            });
+          })
+        : [
+            Text({
+              content: "No FirstMate sessions to close.",
+              fg: colors.muted,
+            }),
+          ]),
+    ),
+    ...(progress && progress.foreign.length > 0
+      ? [
+          Text({
+            content: `Left untouched: ${progress.foreign.join(", ")}`,
+            fg: colors.muted,
+          }),
+        ]
+      : []),
   );
 }
 
@@ -530,10 +679,30 @@ function buildDeck(
   selectedEventIndex: number,
   message: string | null,
   pandamateInput: string,
+  shutdownProgress: TuiShutdownProgress | null,
   onSelect: (index: number) => void,
 ) {
   const mode = layoutForWidth(renderer.width);
   const project = selectedProject(model);
+
+  if (screen === "confirm-shutdown-all" || screen === "shutdown") {
+    return Box(
+      {
+        id: "deck",
+        width: "100%",
+        height: "100%",
+        backgroundColor: colors.graphite,
+        flexDirection: "column",
+        padding: 1,
+        gap: 1,
+      },
+      header(model, "shutdown"),
+      screen === "shutdown"
+        ? shutdownPanel(shutdownProgress)
+        : shutdownConfirmPanel(model),
+      footer(screen, message),
+    );
+  }
 
   if (screen === "input") {
     return Box(
@@ -692,6 +861,7 @@ let selectedEventIndex = Math.max(0, events.length - 1);
 let screen: Screen = "home";
 let actionMessage: string | null = null;
 let pandamateInput = "";
+let shutdownProgress: TuiShutdownProgress | null = null;
 let reducedMotion =
   process.env.PANDAMATE_REDUCED_MOTION === "1" ||
   process.env.REDUCED_MOTION === "1";
@@ -722,6 +892,7 @@ function render(): void {
       selectedEventIndex,
       actionMessage,
       pandamateInput,
+      shutdownProgress,
       select,
     ),
   );
@@ -813,6 +984,31 @@ function requestReload(): void {
   render();
 }
 
+/**
+ * Ask the host to close all of Pandamate. From here on the daemon projection
+ * stops arriving — the daemon is part of what is being closed — so the screen
+ * lives entirely off the pushed shutdown progress until this window itself is
+ * closed as the final step.
+ */
+function requestFullShutdown(): void {
+  if (!process.send) {
+    actionMessage =
+      "Control channel unavailable. Start with spike:tui:discovered.";
+    screen = "home";
+    render();
+    return;
+  }
+  const request: TuiActionRequest = {
+    type: "action.request",
+    action: "pandamate.shutdown-all",
+  };
+  process.send(request);
+  shutdownProgress = null;
+  screen = "shutdown";
+  actionMessage = null;
+  render();
+}
+
 function submitPandamateInput(): void {
   const text = pandamateInput.trim();
   if (!text) {
@@ -863,8 +1059,40 @@ renderer.keyInput.on("keypress", (key) => {
     return;
   }
 
+  if (screen === "shutdown") {
+    // Nothing to steer while Pandamate closes itself; only a failed shutdown
+    // hands the keyboard back, so a stuck sequence is never a trapped TUI.
+    if (
+      shutdownProgress?.phase === "failed" &&
+      (key.name === "escape" || key.name === "q")
+    ) {
+      screen = "home";
+      actionMessage = shutdownProgress.headline;
+      render();
+    }
+    return;
+  }
+
+  if (screen === "confirm-shutdown-all") {
+    if (key.name === "y") {
+      requestFullShutdown();
+    } else if (key.name === "n" || key.name === "escape") {
+      screen = "home";
+      actionMessage = "Full shutdown cancelled.";
+      render();
+    }
+    return;
+  }
+
   if (key.sequence === "R") {
     requestReload();
+    return;
+  }
+
+  if (key.sequence === "X") {
+    screen = "confirm-shutdown-all";
+    actionMessage = null;
+    render();
     return;
   }
 
@@ -1017,6 +1245,16 @@ renderer.keyInput.on("paste", (event) => {
 
 process.on("message", (value: unknown) => {
   try {
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      (value as Record<string, unknown>).type === "shutdown.progress"
+    ) {
+      shutdownProgress = parseTuiShutdownProgress(value);
+      screen = "shutdown";
+      render();
+      return;
+    }
     if (
       typeof value === "object" &&
       value !== null &&

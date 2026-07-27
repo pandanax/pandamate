@@ -57,8 +57,46 @@ const timer = setTimeout(() => {
   });
 }, 500);
 
-child.on("message", () => {
-  // The smoke only verifies parent-to-TUI projection updates.
+child.on("message", (value: unknown) => {
+  // A full shutdown is driven by the host, so the smoke plays that part: it
+  // answers the request with the progress the real launcher would push, ending
+  // in a failure — the one phase that hands the keyboard back, so the smoke can
+  // leave the screen again.
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    (value as Record<string, unknown>).action !== "pandamate.shutdown-all"
+  ) {
+    return;
+  }
+  child.send({
+    type: "shutdown.progress",
+    phase: "firstmates",
+    headline: "Asking 1 FirstMate to shut down gracefully…",
+    sessions: [
+      {
+        session: "firstmate-live-project",
+        outcome: "requested",
+        detail: "Shutdown sent to window 0 ($1:@2.%3)",
+      },
+    ],
+    foreign: ["work"],
+  });
+  setTimeout(() => {
+    child.send({
+      type: "shutdown.progress",
+      phase: "failed",
+      headline: "Smoke fixture: the shutdown stops here.",
+      sessions: [
+        {
+          session: "firstmate-live-project",
+          outcome: "closed",
+          detail: "Closed itself gracefully",
+        },
+      ],
+      foreign: ["work"],
+    });
+  }, 300);
 });
 child.on("error", (error) => {
   clearTimeout(timer);

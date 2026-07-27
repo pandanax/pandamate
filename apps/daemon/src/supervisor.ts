@@ -144,6 +144,7 @@ export class FirstMateSupervisor {
   readonly #watchers = new Map<string, WatcherDeployment>();
   #timer: ReturnType<typeof setInterval> | null = null;
   #reconciling = false;
+  #draining = false;
 
   constructor(options: {
     readonly config: PandamateConfig;
@@ -265,6 +266,26 @@ Own this project's detailed work and durable project state. Read the repository 
       clearInterval(this.#timer);
       this.#timer = null;
     }
+  }
+
+  get draining(): boolean {
+    return this.#draining;
+  }
+
+  /**
+   * Put the fleet into a shutdown: a draining supervisor keeps watching, but
+   * neither launches nor kills. Without it a full graceful shutdown cannot
+   * work — the moment a FirstMate closes its own session as the last step of
+   * its teardown, an ordinary reconciliation would read the gap as a crash and
+   * deploy it all over again. It is deliberately in-memory only, so a daemon
+   * restart is always the way back to normal supervision.
+   */
+  setDraining(draining: boolean): void {
+    if (this.#draining === draining) {
+      return;
+    }
+    this.#draining = draining;
+    this.#log("info", draining ? "supervisor.draining" : "supervisor.resumed");
   }
 
   reconcileNow(): void {
@@ -407,11 +428,43 @@ Own this project's detailed work and durable project state. Read the repository 
     );
   }
 
+  /**
+   * Draining supervision: record what has already gone, touch nothing else.
+   * A FirstMate still holding its session is mid-teardown and must be left to
+   * finish, and one whose session is gone is simply closed — which is the only
+   * progress signal a graceful fleet shutdown has.
+   */
+  #observeWhileDraining(
+    project: Project,
+    runtime: DiscoveredTmuxSession | undefined,
+  ): void {
+    if (
+      runtime ||
+      project.actualState === "stopped" ||
+      project.actualState === "registered"
+    ) {
+      return;
+    }
+    this.#watchers.delete(project.slug);
+    this.#store.recordProjectRuntime(project.slug, {
+      actualState: "stopped",
+      tmuxTarget: null,
+      tmuxSessionName:
+        project.tmuxSessionName ?? targetForProject(project.slug),
+      currentSummary: "Closed during a full Pandamate shutdown",
+      lastHeartbeatAt: project.lastHeartbeatAt,
+    });
+  }
+
   #reconcileProject(
     project: Project,
     sessions: readonly DiscoveredTmuxSession[],
   ): void {
     let runtime = this.#runtimeFor(project, sessions);
+    if (this.#draining) {
+      this.#observeWhileDraining(project, runtime);
+      return;
+    }
     if (project.desiredState === "stopped") {
       if (!runtime && project.actualState === "registered") {
         return;

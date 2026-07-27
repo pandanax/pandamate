@@ -33,6 +33,12 @@ export type Request =
   | {
       readonly protocol: 1;
       readonly requestId: string;
+      readonly type: "system.drain";
+      readonly payload: { readonly draining: boolean };
+    }
+  | {
+      readonly protocol: 1;
+      readonly requestId: string;
       readonly type: "project.list";
       readonly payload: Readonly<Record<string, never>>;
     }
@@ -186,6 +192,10 @@ export type Request =
 export type ResponseData =
   | { readonly pong: true; readonly pid: number }
   | { readonly shuttingDown: true }
+  | {
+      readonly draining: boolean;
+      readonly projects: readonly Project[];
+    }
   | { readonly projects: readonly Project[] }
   | { readonly project: Project }
   | { readonly events: readonly EventRecord[]; readonly nextCursor: number }
@@ -260,6 +270,16 @@ export function parseRequest(value: unknown): Request {
         requestId,
         type: input.type,
         payload: {},
+      };
+    case "system.drain":
+      if (typeof payload.draining !== "boolean") {
+        throw new Error("Invalid drain request");
+      }
+      return {
+        protocol: protocolVersion,
+        requestId,
+        type: input.type,
+        payload: { draining: payload.draining },
       };
     case "project.get":
     case "project.open":

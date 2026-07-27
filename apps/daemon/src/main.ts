@@ -1,5 +1,9 @@
 import { loadConfig, prepareDirectories } from "@pandamate/config";
-import { TmuxClient } from "@pandamate/runtime-tmux";
+import {
+  closeControlTab,
+  openSessionAsControlTab,
+  TmuxClient,
+} from "@pandamate/runtime-tmux";
 import { PandamateStore } from "@pandamate/storage";
 
 import { acquireInstanceLock } from "./lock.ts";
@@ -65,7 +69,15 @@ process.once("SIGINT", () => void stop());
 process.once("SIGTERM", () => void stop());
 
 try {
-  server = await startServer(config, store, () => void stop(), tmux);
+  server = await startServer(
+    config,
+    store,
+    () => void stop(),
+    tmux,
+    openSessionAsControlTab,
+    closeControlTab,
+    (draining) => supervisor.setDraining(draining),
+  );
   supervisor.start();
   timerScheduler.start();
   mailboxScheduler.start();

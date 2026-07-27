@@ -87,6 +87,7 @@ function handleRequest(
     sessionName: string,
   ) => boolean,
   memory: MemoryMaterializer,
+  setDraining: (draining: boolean) => void,
 ): Response {
   switch (request.type) {
     case "system.ping":
@@ -98,6 +99,23 @@ function handleRequest(
       return response(request.requestId, () => {
         requestShutdown();
         return { shuttingDown: true };
+      });
+    case "system.drain":
+      // Draining is the first step of a full shutdown: supervision pauses, and
+      // every project is durably marked stopped in the same breath, so nothing
+      // is relaunched now and nothing comes back by itself after a restart.
+      return response(request.requestId, () => {
+        setDraining(request.payload.draining);
+        const projects = store.listProjects().map((project) =>
+          request.payload.draining && project.desiredState !== "stopped"
+            ? store.setProjectDesiredState(
+                project.slug,
+                "stopped",
+                `drain:${request.requestId.slice(0, 60)}:${project.slug}`,
+              )
+            : project,
+        );
+        return { draining: request.payload.draining, projects };
       });
     case "project.list":
       return response(request.requestId, () => ({
@@ -314,6 +332,7 @@ export async function startServer(
     tmux: Pick<TmuxClient, "run" | "resolveSession">,
     sessionName: string,
   ) => boolean = closeControlTab,
+  setDraining: (draining: boolean) => void = () => {},
 ): Promise<DaemonServer> {
   removeSocket(config.socketPath);
   const memory = new MemoryMaterializer(config.memoryDirectory);
@@ -349,6 +368,7 @@ export async function startServer(
           openSession,
           closeSession,
           memory,
+          setDraining,
         );
       } catch (error) {
         result = {

@@ -111,6 +111,7 @@ Global:
 | `m` | message selected FirstMate |
 | `l` | project timeline |
 | `?` | contextual help |
+| `X` | close all of Pandamate, gracefully |
 | `q` | close TUI, leave daemon/agents running |
 
 Mouse selection and scrolling are supported but never required.
@@ -172,6 +173,18 @@ tmux sessions. Reset has its own confirmation and combines graceful crew
 shutdown with a fresh deployment while keeping the main control pane alive.
 Immediate stop states that every window and pane will terminate at once. Only
 `y` executes either action; `n` or `Esc` cancels it.
+
+`X` is the fleet-wide counterpart, and the only action that ends Pandamate
+itself. Its confirmation names how many live FirstMates and services will close,
+spells out the three stages in order, and states that tmux sessions outside the
+`firstmate-*` and `pandamate:*` namespaces are left alone. Confirming replaces
+the screen with live shutdown progress: the four stages, and one line per
+session showing whether it closed itself, was forced, or could not be reached.
+That screen is fed by the host over IPC rather than by the daemon projection,
+because the daemon is stopped halfway through the sequence it describes. Keys
+are ignored while it runs — the window is closed as the final step — except
+after a failure, which hands the keyboard back so `Esc` returns Home. Full
+record: [17-full-shutdown.md](17-full-shutdown.md).
 
 The command palette combines deterministic commands and natural language:
 
