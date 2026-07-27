@@ -272,7 +272,7 @@ function handleRequest(
   }
 }
 
-function log(
+export function log(
   config: PandamateConfig,
   level: "info" | "error",
   event: string,

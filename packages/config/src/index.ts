@@ -19,6 +19,7 @@ export interface PandamateConfig {
   readonly fakeFirstMateEntry: string | undefined;
   readonly reconcileIntervalMs: number;
   readonly heartbeatStaleMs: number;
+  readonly watcherRestartBackoffMs: number;
 }
 
 function configuredPath(
@@ -130,6 +131,14 @@ export function loadConfig(
       5_000,
       250,
       300_000,
+    ),
+    // How long a redeployed Watcher must stay up before the supervisor treats
+    // it as healthy again, and therefore the slowest a broken one can respawn.
+    watcherRestartBackoffMs: boundedMilliseconds(
+      "PANDAMATE_WATCHER_RESTART_BACKOFF_MS",
+      10_000,
+      1_000,
+      600_000,
     ),
   };
 }

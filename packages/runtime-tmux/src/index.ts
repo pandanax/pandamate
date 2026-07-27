@@ -355,6 +355,28 @@ export class TmuxClient {
     this.run(["set-environment", "-g", name, value]);
   }
 
+  /**
+   * Publish one Pandamate fact into a project session's own environment.
+   * Window `0` receives its environment from the launch argv, but a window
+   * opened later — the Watcher, a worker the FirstMate dispatches — inherits
+   * the session environment instead, so anything those need has to live here.
+   */
+  setSessionEnvironment(sessionName: string, name: string, value: string): void {
+    if (!/^PANDAMATE_[A-Z0-9_]+$/.test(name)) {
+      throw new Error(`Unsafe session environment name: ${name}`);
+    }
+    if (value.length === 0 || value.length > 1024 || /[\0\n]/.test(value)) {
+      throw new Error(`Unsafe session environment value for ${name}`);
+    }
+    this.run([
+      "set-environment",
+      "-t",
+      this.resolveSession(sessionName),
+      name,
+      value,
+    ]);
+  }
+
   panePid(target: string): number {
     const value = this.run([
       "display-message",
@@ -504,20 +526,20 @@ export function openSessionInNewITermWindow(
   return sessionId;
 }
 
-interface ControlWindow {
+interface SessionWindow {
   readonly index: number;
   readonly id: string;
   readonly name: string;
 }
 
-function listControlWindows(
+function listSessionWindows(
   tmux: Pick<TmuxClient, "run">,
-  controlSessionId: string,
-): readonly ControlWindow[] {
+  sessionId: string,
+): readonly SessionWindow[] {
   const rows = tmux.run([
     "list-windows",
     "-t",
-    controlSessionId,
+    sessionId,
     "-F",
     `#{window_index}${fieldSeparator}#{window_id}${fieldSeparator}#{window_name}`,
   ]);
@@ -535,6 +557,77 @@ function listControlWindows(
     }
     return { index: parsedIndex, id: validateStableWindowId(id), name };
   });
+}
+
+export const watcherWindowName = "watch";
+
+/**
+ * Bring a project's Watcher up as window `watch` of its own FirstMate session.
+ *
+ * The window is deliberately not wrapped in a keep-alive shell: when the
+ * Watcher exits, the window goes with it, the supervisor sees the gap on its
+ * next pass, and deploys it again. A wrapper would leave an idle shell behind
+ * that looks exactly like a healthy Watcher from the outside.
+ *
+ * tmux runs the window command through a shell, so the command is validated as
+ * a bare absolute path rather than trusted. Returns the new window id, or null
+ * when the session already has its Watcher.
+ *
+ * The session name is published into the session environment first, because
+ * the window inherits that and not the FirstMate's own launch environment: a
+ * Watcher that supervises windows has to know which session to supervise, and
+ * guessing gave a crew supervisor that watched an empty `crew` session while
+ * the crew lived here.
+ */
+export function deployWatcherWindow(
+  tmux: Pick<TmuxClient, "run" | "resolveSession">,
+  sessionName: string,
+  workspace: string,
+  command: string,
+): string | null {
+  if (!sessionName.startsWith("firstmate-")) {
+    throw new Error("Only FirstMate project sessions run a project Watcher");
+  }
+  validateProjectSlug(sessionName.slice("firstmate-".length));
+  if (
+    !isAbsolute(workspace) ||
+    normalize(workspace) !== workspace ||
+    !/^\/[A-Za-z0-9._+/-]+$/.test(workspace)
+  ) {
+    throw new Error(`Invalid Watcher working directory: ${workspace}`);
+  }
+  validateExecutablePath(command);
+  const sessionId = tmux.resolveSession(sessionName);
+  if (
+    listSessionWindows(tmux, sessionId).some(
+      (window) => window.name === watcherWindowName,
+    )
+  ) {
+    return null;
+  }
+  tmux.run([
+    "set-environment",
+    "-t",
+    sessionId,
+    "PANDAMATE_TMUX_SESSION",
+    sessionName,
+  ]);
+  return validateStableWindowId(
+    tmux.run([
+      "new-window",
+      "-d",
+      "-t",
+      sessionId,
+      "-n",
+      watcherWindowName,
+      "-c",
+      workspace,
+      "-P",
+      "-F",
+      "#{window_id}",
+      command,
+    ]),
+  );
 }
 
 export interface ControlTab {
@@ -568,7 +661,7 @@ export function controlTabForSession(
   } catch {
     return null;
   }
-  const tab = listControlWindows(tmux, controlSessionId).find(
+  const tab = listSessionWindows(tmux, controlSessionId).find(
     (window) => window.id === projectWindowId,
   );
   return tab ? { index: tab.index, name: tab.name } : null;
@@ -633,7 +726,7 @@ export function configureControlStatusBar(
     ],
     ["window-status-separator", ""],
   ];
-  for (const window of listControlWindows(tmux, controlSessionId)) {
+  for (const window of listSessionWindows(tmux, controlSessionId)) {
     for (const [name, value] of windowOptions) {
       tmux.run(["set-window-option", "-t", window.id, name, value]);
     }
@@ -678,7 +771,7 @@ export function openSessionAsControlTab(
     ]),
   );
 
-  const controlWindows = listControlWindows(tmux, controlSessionId);
+  const controlWindows = listSessionWindows(tmux, controlSessionId);
   const linked = controlWindows.find((window) => window.id === projectWindowId);
   const targetIndex = linked
     ? linked.index
@@ -747,7 +840,7 @@ export function closeControlTab(
     return false;
   }
 
-  const controlWindows = listControlWindows(tmux, controlSessionId);
+  const controlWindows = listSessionWindows(tmux, controlSessionId);
   const linked = controlWindows.find((window) => window.id === projectWindowId);
   if (!linked) {
     return false;

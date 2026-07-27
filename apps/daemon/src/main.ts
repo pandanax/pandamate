@@ -3,7 +3,7 @@ import { TmuxClient } from "@pandamate/runtime-tmux";
 import { PandamateStore } from "@pandamate/storage";
 
 import { acquireInstanceLock } from "./lock.ts";
-import { startServer } from "./server.ts";
+import { log, startServer } from "./server.ts";
 import { FirstMateSupervisor } from "./supervisor.ts";
 import { TimerScheduler } from "./timer-scheduler.ts";
 import { MailboxScheduler } from "./mailbox-scheduler.ts";
@@ -22,6 +22,10 @@ const supervisor = new FirstMateSupervisor({
   config,
   store,
   tmux,
+  // Supervision that fails quietly is what a Watcher exists to prevent, so the
+  // supervisor's own starts, restarts, and abandoned Watchers go to the same
+  // durable daemon log as everything else.
+  log: (level, event, fields) => log(config, level, event, fields),
 });
 const timerScheduler = new TimerScheduler(store);
 const mailboxScheduler = new MailboxScheduler(store);

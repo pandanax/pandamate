@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
-import { firstMateProfileForProject } from "./supervisor.ts";
+import { loadConfig, type PandamateConfig } from "@pandamate/config";
+import type { ActualState, Project } from "@pandamate/domain";
+
+import { FirstMateSupervisor, firstMateProfileForProject } from "./supervisor.ts";
 
 test("maps durable project kinds to public FirstMate profiles", () => {
   assert.equal(
@@ -16,4 +22,355 @@ test("maps durable project kinds to public FirstMate profiles", () => {
     firstMateProfileForProject({ kind: "docs" }).name,
     "DocResearch",
   );
+});
+
+interface FakeWindow {
+  readonly id: string;
+  index: number;
+  name: string;
+}
+
+interface FakeSession {
+  readonly id: string;
+  name: string;
+  readonly windows: FakeWindow[];
+}
+
+/**
+ * Enough tmux to drive one reconciliation pass: sessions, their windows, and
+ * the two list formats the supervisor reads. Unknown commands throw so a new
+ * tmux call cannot pass a test unnoticed.
+ */
+class FakeTmux {
+  readonly sessions: FakeSession[] = [];
+  readonly commands: string[][] = [];
+  readonly environment: Array<{
+    readonly session: string;
+    readonly name: string;
+    readonly value: string;
+  }> = [];
+  readonly launches: Array<{
+    readonly session: string;
+    readonly workspace: string;
+    readonly command: readonly string[];
+  }> = [];
+  #nextSession = 1;
+  #nextWindow = 1;
+
+  run(args: readonly string[]): string {
+    this.commands.push([...args]);
+    switch (args[0]) {
+      case "list-sessions":
+        return this.sessions
+          .map(
+            (session) =>
+              `${session.id}|0|${session.windows.length}|${session.name}`,
+          )
+          .join("\n");
+      case "list-panes":
+        return this.sessions
+          .flatMap((session) =>
+            session.windows.map(() => `${session.id}|0|node|/workspace`),
+          )
+          .join("\n");
+      case "list-windows":
+        return this.#byId(args[2] ?? "")
+          .windows.map((window) => `${window.index}|${window.id}|${window.name}`)
+          .join("\n");
+      case "new-window": {
+        const session = this.#byId(args[3] ?? "");
+        const window = {
+          id: `@${this.#nextWindow++}`,
+          index: session.windows.length,
+          name: args[5] ?? "",
+        };
+        session.windows.push(window);
+        return window.id;
+      }
+      case "set-environment":
+        this.environment.push({
+          session: args[2] ?? "",
+          name: args[3] ?? "",
+          value: args[4] ?? "",
+        });
+        return "";
+      default:
+        throw new Error(`Unexpected tmux command: ${args.join(" ")}`);
+    }
+  }
+
+  resolveSession(sessionName: string): string {
+    const session = this.sessions.find((item) => item.name === sessionName);
+    if (!session) {
+      throw new Error(`Unknown tmux session: ${sessionName}`);
+    }
+    return session.id;
+  }
+
+  createDetachedInDirectory(
+    target: string,
+    workspace: string,
+    command: readonly string[],
+  ): void {
+    this.launches.push({ session: target, workspace, command: [...command] });
+    this.sessions.push({
+      id: `$${this.#nextSession++}`,
+      name: target,
+      windows: [{ id: `@${this.#nextWindow++}`, index: 0, name: target }],
+    });
+  }
+
+  killSession(target: string): void {
+    const index = this.sessions.findIndex((item) => item.name === target);
+    if (index >= 0) {
+      this.sessions.splice(index, 1);
+    }
+  }
+
+  renameSession(target: string, newName: string): void {
+    this.#byName(target).name = newName;
+  }
+
+  setSessionEnvironment(sessionName: string, name: string, value: string): void {
+    this.environment.push({
+      session: this.resolveSession(sessionName),
+      name,
+      value,
+    });
+  }
+
+  windowNames(sessionName: string): readonly string[] {
+    return this.#byName(sessionName).windows.map((window) => window.name);
+  }
+
+  closeWindow(sessionName: string, windowName: string): void {
+    const session = this.#byName(sessionName);
+    const index = session.windows.findIndex(
+      (window) => window.name === windowName,
+    );
+    session.windows.splice(index, 1);
+  }
+
+  #byId(sessionId: string): FakeSession {
+    const session = this.sessions.find((item) => item.id === sessionId);
+    if (!session) {
+      throw new Error(`Unknown tmux session id: ${sessionId}`);
+    }
+    return session;
+  }
+
+  #byName(sessionName: string): FakeSession {
+    return this.#byId(this.resolveSession(sessionName));
+  }
+}
+
+class FakeStore {
+  #projects: Project[];
+
+  constructor(projects: readonly Project[]) {
+    this.#projects = [...projects];
+  }
+
+  listProjects(): readonly Project[] {
+    return this.#projects;
+  }
+
+  recordProjectRuntime(
+    slug: string,
+    observation: {
+      readonly actualState: ActualState;
+      readonly tmuxTarget: string | null;
+      readonly tmuxSessionName: string | null;
+      readonly currentSummary: string;
+      readonly lastHeartbeatAt: string | null;
+    },
+  ): Project {
+    const index = this.#projects.findIndex((item) => item.slug === slug);
+    const updated = { ...this.#projects[index], ...observation } as Project;
+    this.#projects[index] = updated;
+    return updated;
+  }
+}
+
+function fixtureProject(workspace: string): Project {
+  return {
+    id: "prj_fixture",
+    slug: "fixture",
+    title: "Fixture",
+    kind: "arc",
+    workspace,
+    desiredState: "running",
+    actualState: "starting",
+    tmuxTarget: null,
+    tmuxSessionName: null,
+    currentSummary: "Registered",
+    attentionLevel: "none",
+    lastHeartbeatAt: null,
+    version: 1,
+    createdAt: "2026-07-27T12:00:00.000Z",
+    updatedAt: "2026-07-27T12:00:00.000Z",
+  };
+}
+
+function fixtureConfig(directory: string): PandamateConfig {
+  return loadConfig({
+    PANDAMATE_STATE_DIR: join(directory, "state"),
+    PANDAMATE_RUNTIME_DIR: join(directory, "runtime"),
+    PANDAMATE_CLAUDE_EXECUTABLE: join(directory, "claude"),
+  });
+}
+
+function watcherWorkspace(directory: string): string {
+  const workspace = join(directory, "workspace");
+  mkdirSync(join(workspace, ".pandamate"), { recursive: true });
+  const watcher = join(workspace, ".pandamate", "watch");
+  writeFileSync(watcher, "#!/bin/sh\nsleep 300\n");
+  chmodSync(watcher, 0o755);
+  return workspace;
+}
+
+test("deploys the Watcher beside a launched FirstMate and puts it back when it dies", () => {
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-watcher-"));
+  try {
+    const workspace = watcherWorkspace(directory);
+    const tmux = new FakeTmux();
+    tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
+    const store = new FakeStore([fixtureProject(workspace)]);
+    let now = Date.parse("2026-07-27T12:00:00.000Z");
+    const config = fixtureConfig(directory);
+    const supervisor = new FirstMateSupervisor({
+      config,
+      store,
+      tmux,
+      now: () => new Date(now),
+    });
+
+    supervisor.reconcileNow();
+    assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
+      "firstmate-fixture",
+      "watch",
+    ]);
+    const launch = tmux.launches.find(
+      (entry) => entry.session === "firstmate-fixture",
+    );
+    assert.ok(
+      launch?.command.includes("PANDAMATE_TMUX_SESSION=firstmate-fixture"),
+    );
+    // Window 0 learns its session from the launch argv, the Watcher window from
+    // the session environment.
+    assert.ok(tmux.environment.length > 0);
+    assert.ok(
+      tmux.environment.every(
+        (entry) =>
+          entry.name === "PANDAMATE_TMUX_SESSION" &&
+          entry.value === "firstmate-fixture",
+      ),
+    );
+
+    // A healthy Watcher is left alone, however often reconciliation runs.
+    now += 60_000;
+    supervisor.reconcileNow();
+    supervisor.reconcileNow();
+    assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
+      "firstmate-fixture",
+      "watch",
+    ]);
+
+    tmux.closeWindow("firstmate-fixture", "watch");
+    now += 60_000;
+    supervisor.reconcileNow();
+    assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
+      "firstmate-fixture",
+      "watch",
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("stops redeploying a Watcher that never survives its backoff", () => {
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-watcher-"));
+  try {
+    const workspace = watcherWorkspace(directory);
+    const tmux = new FakeTmux();
+    tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
+    const store = new FakeStore([fixtureProject(workspace)]);
+    let now = Date.parse("2026-07-27T12:00:00.000Z");
+    const events: string[] = [];
+    const config = fixtureConfig(directory);
+    const supervisor = new FirstMateSupervisor({
+      config,
+      store,
+      tmux,
+      log: (_level, event) => events.push(event),
+      now: () => new Date(now),
+    });
+
+    supervisor.reconcileNow();
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      tmux.closeWindow("firstmate-fixture", "watch");
+      // A Watcher that dies inside the backoff is not redeployed immediately…
+      supervisor.reconcileNow();
+      assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
+        "firstmate-fixture",
+      ]);
+      now += config.watcherRestartBackoffMs;
+      supervisor.reconcileNow();
+      if (tmux.windowNames("firstmate-fixture").length === 1) {
+        break;
+      }
+    }
+
+    // …and after five futile deploys the supervisor stops and says so.
+    assert.equal(
+      events.filter((event) => event === "supervisor.watcher.deployed").length,
+      5,
+    );
+    assert.ok(events.includes("supervisor.watcher.abandoned"));
+    assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
+      "firstmate-fixture",
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("leaves a project without a declared Watcher and an adopted session alone", () => {
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-watcher-"));
+  try {
+    const bare = join(directory, "bare");
+    mkdirSync(bare);
+    const tmux = new FakeTmux();
+    tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
+    const store = new FakeStore([fixtureProject(bare)]);
+    const supervisor = new FirstMateSupervisor({
+      config: fixtureConfig(directory),
+      store,
+      tmux,
+    });
+
+    supervisor.reconcileNow();
+    supervisor.reconcileNow();
+    assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
+      "firstmate-fixture",
+    ]);
+
+    // An adopted session was built by somebody else; Pandamate does not
+    // furnish it with windows even when the workspace declares a Watcher.
+    const adoptedTmux = new FakeTmux();
+    adoptedTmux.createDetachedInDirectory("handmade", directory, ["/bin/sh"]);
+    const adopted = {
+      ...fixtureProject(watcherWorkspace(directory)),
+      actualState: "running" as const,
+      tmuxSessionName: "handmade",
+    };
+    new FirstMateSupervisor({
+      config: fixtureConfig(directory),
+      store: new FakeStore([adopted]),
+      tmux: adoptedTmux,
+    }).reconcileNow();
+    assert.deepEqual(adoptedTmux.windowNames("handmade"), ["handmade"]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   attachCommandForSessionId,
+  deployWatcherWindow,
   discoverTmuxSessions,
   closeControlTab,
   configureControlStatusBar,
@@ -525,6 +526,136 @@ test("close refuses control sessions and non-project sessions", () => {
   assert.throws(() => closeControlTab(tmux, "pandamate:home"));
   assert.throws(() => closeControlTab(tmux, "randomsession"));
   assert.deepEqual(tmux.calls, []);
+});
+
+test("deploys a Watcher window once per session and never wraps it in a shell", () => {
+  const runner = new RecordingRunner([
+    "$12|firstmate-fixture",
+    "0|@3|fixture",
+    "",
+    "@9",
+  ]);
+  const tmux = new TmuxClient({ runner });
+
+  assert.equal(
+    deployWatcherWindow(
+      tmux,
+      "firstmate-fixture",
+      "/workspace/fixture",
+      "/workspace/fixture/bin/fm-watch",
+    ),
+    "@9",
+  );
+  assert.deepEqual(runner.calls.slice(-2), [
+    {
+      executable: "tmux",
+      args: [
+        "set-environment",
+        "-t",
+        "$12",
+        "PANDAMATE_TMUX_SESSION",
+        "firstmate-fixture",
+      ],
+    },
+    {
+      executable: "tmux",
+      args: [
+        "new-window",
+        "-d",
+        "-t",
+        "$12",
+        "-n",
+        "watch",
+        "-c",
+        "/workspace/fixture",
+        "-P",
+        "-F",
+        "#{window_id}",
+        "/workspace/fixture/bin/fm-watch",
+      ],
+    },
+  ]);
+
+  const existing = new RecordingRunner([
+    "$12|firstmate-fixture",
+    "0|@3|fixture\n1|@4|watch",
+  ]);
+  assert.equal(
+    deployWatcherWindow(
+      new TmuxClient({ runner: existing }),
+      "firstmate-fixture",
+      "/workspace/fixture",
+      "/workspace/fixture/bin/fm-watch",
+    ),
+    null,
+  );
+  assert.equal(existing.calls.length, 2);
+});
+
+test("Watcher deployment refuses control sessions and shell-unsafe arguments", () => {
+  const tmux = new TmuxClient({
+    runner: new RecordingRunner(["$12|firstmate-fixture", "0|@3|fixture", "@9"]),
+  });
+  assert.throws(() =>
+    deployWatcherWindow(
+      tmux,
+      "pandamate:home",
+      "/workspace/fixture",
+      "/workspace/fixture/bin/fm-watch",
+    ),
+  );
+  assert.throws(() =>
+    deployWatcherWindow(
+      tmux,
+      "firstmate-fixture",
+      "/work space/fixture",
+      "/workspace/fixture/bin/fm-watch",
+    ),
+  );
+  assert.throws(() =>
+    deployWatcherWindow(
+      tmux,
+      "firstmate-fixture",
+      "/workspace/fixture",
+      "/workspace/fixture/bin/fm-watch; id",
+    ),
+  );
+  assert.throws(() =>
+    deployWatcherWindow(
+      tmux,
+      "firstmate-fixture",
+      "workspace/fixture",
+      "/workspace/fixture/bin/fm-watch",
+    ),
+  );
+});
+
+test("publishes the project session into its own tmux environment", () => {
+  const runner = new RecordingRunner(["$12|firstmate-fixture", ""]);
+  const tmux = new TmuxClient({ runner });
+  tmux.setSessionEnvironment(
+    "firstmate-fixture",
+    "PANDAMATE_TMUX_SESSION",
+    "firstmate-fixture",
+  );
+  assert.deepEqual(runner.calls.at(-1), {
+    executable: "tmux",
+    args: [
+      "set-environment",
+      "-t",
+      "$12",
+      "PANDAMATE_TMUX_SESSION",
+      "firstmate-fixture",
+    ],
+  });
+  assert.throws(() => tmux.setSessionEnvironment("firstmate-fixture", "PATH", "x"));
+  assert.throws(() =>
+    tmux.setSessionEnvironment(
+      "firstmate-fixture",
+      "PANDAMATE_TMUX_SESSION",
+      "one\ntwo",
+    ),
+  );
 });
 
 test("iTerm attach command only accepts stable tmux session ids", () => {

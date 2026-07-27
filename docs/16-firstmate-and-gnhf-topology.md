@@ -88,6 +88,17 @@ thing that keeps arc stores from accumulating:
 `bin/fm-watch` calls `crew-retire` automatically once a crewmate's PR reaches
 `merged` or `discarded`, so the normal path leaves nothing behind.
 
+That only holds while the watcher is actually running, and until 2026-07-27 it
+was not: `bin/fm-up` is the only thing that ever started it, and a FirstMate
+launched by Pandamate never goes through `fm-up`. Both halves now meet in the
+middle — Pandamate deploys `firstmate/bin/fm-watch` as window `watch` of the
+project session and redeploys it when it exits ([D-028](08-decisions.md)), and
+`bin/_common.sh` takes `CREW_SESSION` from `PANDAMATE_TMUX_SESSION`, so
+crewmates, the watcher, and `crew-retire` all work in the session the captain is
+looking at instead of a second, invisible `crew` session with its own first mate.
+`crew-retire` additionally refuses to kill window `0`, which is the FirstMate's
+own and, under Pandamate, is named after the project rather than `firstmate`.
+
 **Known gap:** this covers only worktrees created through `crew-mount`. Anything
 mounted by hand with `arc mount` is swept by nobody. Stale stores are expensive
 — a single one held 7.1 GB. To audit:

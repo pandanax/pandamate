@@ -199,6 +199,29 @@ changes must update this file and the affected specification.
   the latest message. Pandamate does not scrape terminal output.
 - **Status:** accepted.
 
+### D-028 — The Watcher is deployed by the control plane, not by the FirstMate
+
+- **Decision:** A project that declares a supervisor loop gets it running
+  beside its FirstMate without a model turn. The supervisor reads one bounded
+  piece of workspace evidence — an executable `.pandamate/watch`,
+  `firstmate/bin/fm-watch`, or `bin/fm-watch` — and deploys it as window
+  `watch` of the project's own `firstmate-<slug>` session right after launch,
+  then keeps it there: a Watcher whose window is gone is deployed again on a
+  later pass, bounded by `watcherRestartBackoffMs` and five consecutive
+  redeploys before the supervisor stops and logs why. The window is not wrapped
+  in a keep-alive shell, because an idle shell would be indistinguishable from
+  a healthy Watcher. Pandamate publishes the session name in the launch
+  environment and in the session's own tmux environment as
+  `PANDAMATE_TMUX_SESSION`, so the Watcher, the FirstMate, and any window the
+  FirstMate opens later agree on one session.
+- **Excluded on purpose:** the arm-and-wake watcher shape
+  (`bin/fm-watch.sh` armed by the FirstMate's own Stop hook) blocks until one
+  actionable wake and exits for its caller to classify. Deploying that as a
+  detached window would discard every wake reason, so it keeps arming itself.
+  Adopted sessions are also left alone; Pandamate furnishes only sessions it
+  created itself.
+- **Status:** accepted.
+
 ## Proposed; validate in Phase 0
 
 ### D-012 — TypeScript core

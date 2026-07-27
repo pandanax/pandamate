@@ -33,6 +33,58 @@ export interface WorkspaceFirstMateEvidence {
   readonly lastAssistantMessage: string | null;
 }
 
+/**
+ * Where a project may declare the supervisor loop ("Watcher") that has to run
+ * beside its FirstMate, in priority order. `.pandamate/watch` is the explicit
+ * declaration any workspace can add; the two `fm-watch` paths are the crew
+ * tooling's own convention, kept so a project that already has one needs no
+ * extra file.
+ *
+ * Deliberately excluded: the `bin/fm-watch.sh` / `bin/fm-watch-arm.sh` shape.
+ * That watcher is not a loop — it blocks until it has one actionable wake,
+ * prints the reason, and exits for its caller to classify, so it is armed by
+ * the FirstMate's own Stop hook. Running it in a detached tmux window would
+ * throw every wake reason into a window nobody reads.
+ */
+const watcherCandidates = [
+  join(".pandamate", "watch"),
+  join("firstmate", "bin", "fm-watch"),
+  join("bin", "fm-watch"),
+] as const;
+
+function canonicalWorkspacePath(workspace: string): string {
+  return workspace.length > 1 ? workspace.replaceAll(/\/+$/g, "") : workspace;
+}
+
+/**
+ * The Watcher command Pandamate should deploy for a workspace, or null when the
+ * project has none. Bounded, deterministic filesystem evidence only: an
+ * executable regular file at a known path. The result is handed to tmux, which
+ * runs it through a shell, so a path that could not survive that unquoted is
+ * rejected here rather than deployed.
+ */
+export function workspaceWatcherCommand(workspace: string): string | null {
+  const canonicalWorkspace = canonicalWorkspacePath(workspace);
+  for (const candidate of watcherCandidates) {
+    const path = join(canonicalWorkspace, candidate);
+    let stat;
+    try {
+      stat = statSync(path);
+    } catch {
+      // A project without this watcher is the ordinary case.
+      continue;
+    }
+    if (!stat.isFile() || (stat.mode & 0o111) === 0) {
+      continue;
+    }
+    if (!/^\/[A-Za-z0-9._+/-]+$/.test(path)) {
+      throw new Error(`Watcher path is not safe to launch: ${path}`);
+    }
+    return path;
+  }
+  return null;
+}
+
 function readLastBoundedLine(path: string, size: number): string | null {
   const length = Math.min(size, 8_192);
   if (length === 0) {
@@ -74,8 +126,7 @@ export function firstMateWorkspaceEvidence(
   workspace: string,
   claudeProjectsDirectory = join(homedir(), ".claude", "projects"),
 ): WorkspaceFirstMateEvidence {
-  const canonicalWorkspace =
-    workspace.length > 1 ? workspace.replaceAll(/\/+$/g, "") : workspace;
+  const canonicalWorkspace = canonicalWorkspacePath(workspace);
   const stateDirectory = join(canonicalWorkspace, ".firstmate", "state");
   let heartbeatAt: string | null = null;
   try {

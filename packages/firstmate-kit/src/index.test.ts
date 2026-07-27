@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -15,6 +16,7 @@ import {
   FirstMateClient,
   firstMateWorkspaceEvidence,
   HookSpoolClient,
+  workspaceWatcherCommand,
 } from "./index.ts";
 
 test("validates the deterministic FirstMate boundary", () => {
@@ -55,6 +57,54 @@ test("atomically spools a hook while the daemon is unavailable", async () => {
     assert.match(names[0] ?? "", /\.json$/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("finds a declared Watcher and ignores the hook-armed shape", () => {
+  const workspace = mkdtempSync(join(tmpdir(), "pandamate-watcher-"));
+  try {
+    assert.equal(workspaceWatcherCommand(workspace), null);
+
+    // The arm/wake watcher exits after every wake and is armed by the
+    // FirstMate's own Stop hook, so it is never deployed as a loop.
+    mkdirSync(join(workspace, "bin"), { recursive: true });
+    const armed = join(workspace, "bin", "fm-watch.sh");
+    writeFileSync(armed, "#!/bin/sh\n");
+    chmodSync(armed, 0o755);
+    assert.equal(workspaceWatcherCommand(workspace), null);
+
+    // A crew supervisor loop is found where the crew tooling keeps it.
+    const crew = join(workspace, "firstmate", "bin");
+    mkdirSync(crew, { recursive: true });
+    writeFileSync(join(crew, "fm-watch"), "#!/bin/sh\n");
+    assert.equal(workspaceWatcherCommand(workspace), null, "must be executable");
+    chmodSync(join(crew, "fm-watch"), 0o755);
+    assert.equal(
+      workspaceWatcherCommand(`${workspace}/`),
+      join(crew, "fm-watch"),
+    );
+
+    // An explicit declaration outranks any convention.
+    mkdirSync(join(workspace, ".pandamate"), { recursive: true });
+    const declared = join(workspace, ".pandamate", "watch");
+    writeFileSync(declared, "#!/bin/sh\n");
+    chmodSync(declared, 0o755);
+    assert.equal(workspaceWatcherCommand(workspace), declared);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("refuses a Watcher path tmux could not run unquoted", () => {
+  const workspace = mkdtempSync(join(tmpdir(), "pandamate watcher "));
+  try {
+    mkdirSync(join(workspace, ".pandamate"), { recursive: true });
+    const declared = join(workspace, ".pandamate", "watch");
+    writeFileSync(declared, "#!/bin/sh\n");
+    chmodSync(declared, 0o755);
+    assert.throws(() => workspaceWatcherCommand(workspace), /not safe/);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
   }
 });
 

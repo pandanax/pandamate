@@ -6,9 +6,13 @@ import { join } from "node:path";
 
 import type { PandamateConfig } from "@pandamate/config";
 import type { Project } from "@pandamate/domain";
-import { firstMateWorkspaceEvidence } from "@pandamate/firstmate-kit";
+import {
+  firstMateWorkspaceEvidence,
+  workspaceWatcherCommand,
+} from "@pandamate/firstmate-kit";
 import {
   closeControlTab,
+  deployWatcherWindow,
   discoverTmuxSessions,
   targetForProject,
   type DiscoveredTmuxSession,
@@ -40,7 +44,20 @@ type SupervisorTmux = Pick<
   | "createDetachedInDirectory"
   | "killSession"
   | "renameSession"
+  | "setSessionEnvironment"
 >;
+
+/**
+ * How many times in a row the supervisor deploys a Watcher that does not
+ * survive one backoff interval before it stops trying. A Watcher that exits
+ * immediately is broken, and respawning it forever would only bury the reason.
+ */
+const watcherRedeployLimit = 5;
+
+interface WatcherDeployment {
+  readonly deploys: number;
+  readonly lastDeployedAt: number;
+}
 
 export function firstMateProfileForProject(
   project: Pick<Project, "kind">,
@@ -124,6 +141,7 @@ export class FirstMateSupervisor {
   readonly #tmux: SupervisorTmux;
   readonly #log: SupervisorLog;
   readonly #now: () => Date;
+  readonly #watchers = new Map<string, WatcherDeployment>();
   #timer: ReturnType<typeof setInterval> | null = null;
   #reconciling = false;
 
@@ -214,6 +232,7 @@ Own this project's detailed work and durable project state. Read the repository 
     return [
       "/usr/bin/env",
       `PANDAMATE_PROJECT_SLUG=${project.slug}`,
+      `PANDAMATE_TMUX_SESSION=${targetForProject(project.slug)}`,
       `PANDAMATE_SOCKET_PATH=${this.#config.socketPath}`,
       `PANDAMATE_HOOK_SPOOL_DIR=${this.#config.hookSpoolDirectory}`,
       this.#config.claudeExecutable,
@@ -304,6 +323,79 @@ Own this project's detailed work and durable project state. Read the repository 
     }
   }
 
+  /**
+   * A project's Watcher is control-plane infrastructure, not something the
+   * FirstMate has to remember to start: whenever a project that declares one is
+   * running, the supervisor keeps window `watch` of its session up. Deploying
+   * it costs no model turn, and a Watcher that dies is put back on the next
+   * pass — bounded by a backoff and a redeploy limit so a broken one cannot
+   * spin.
+   *
+   * Only sessions Pandamate named itself are furnished this way. An adopted
+   * session belongs to whoever built it.
+   */
+  #ensureWatcher(project: Project, sessionName: string): void {
+    if (
+      this.#config.firstMateAdapter !== "claude-code" ||
+      sessionName !== targetForProject(project.slug)
+    ) {
+      return;
+    }
+    const previous = this.#watchers.get(project.slug);
+    const now = this.#now().getTime();
+    if (
+      previous &&
+      (now - previous.lastDeployedAt < this.#config.watcherRestartBackoffMs ||
+        previous.deploys >= watcherRedeployLimit)
+    ) {
+      return;
+    }
+    try {
+      const command = workspaceWatcherCommand(project.workspace);
+      if (!command) {
+        return;
+      }
+      const windowId = deployWatcherWindow(
+        this.#tmux,
+        sessionName,
+        project.workspace,
+        command,
+      );
+      if (windowId === null) {
+        // It outlived a whole backoff interval, so it is not the broken kind.
+        this.#watchers.delete(project.slug);
+        return;
+      }
+      const deploys = (previous?.deploys ?? 0) + 1;
+      this.#watchers.set(project.slug, { deploys, lastDeployedAt: now });
+      this.#log("info", "supervisor.watcher.deployed", {
+        slug: project.slug,
+        sessionName,
+        windowId,
+        command,
+        deploys,
+      });
+      if (deploys >= watcherRedeployLimit) {
+        this.#log("error", "supervisor.watcher.abandoned", {
+          slug: project.slug,
+          sessionName,
+          command,
+          deploys,
+        });
+      }
+    } catch (error) {
+      this.#watchers.set(project.slug, {
+        deploys: (previous?.deploys ?? 0) + 1,
+        lastDeployedAt: now,
+      });
+      this.#log("error", "supervisor.watcher.failed", {
+        slug: project.slug,
+        sessionName,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   #runtimeFor(
     project: Project,
     sessions: readonly DiscoveredTmuxSession[],
@@ -368,6 +460,16 @@ Own this project's detailed work and durable project state. Read the repository 
         sessionName,
         adapter: this.#config.firstMateAdapter,
       });
+      // Window 0 gets its environment from the launch argv; every window opened
+      // in this session afterwards — the Watcher, a worker the FirstMate
+      // dispatches — inherits it from the session instead.
+      this.#tmux.setSessionEnvironment(
+        sessionName,
+        "PANDAMATE_TMUX_SESSION",
+        sessionName,
+      );
+      this.#watchers.delete(project.slug);
+      this.#ensureWatcher(project, sessionName);
       return;
     }
 
@@ -412,6 +514,7 @@ Own this project's detailed work and durable project state. Read the repository 
       this.#config.firstMateAdapter !== "fake" ||
       runtime.name !== targetForProject(project.slug)
     ) {
+      this.#ensureWatcher(project, runtime.name);
       const evidence =
         this.#config.firstMateAdapter === "claude-code"
           ? firstMateWorkspaceEvidence(project.workspace)

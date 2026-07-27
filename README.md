@@ -60,6 +60,16 @@ Phase 1 has a working vertical slice:
   project identity survives the runtime session; `r` asks a running FirstMate
   to gracefully stop its current crew and then deploy Watcher and service
   windows again without closing the main pane.
+- a project's Watcher is deployed by the supervisor, not asked for in a prompt.
+  A workspace that declares one — executable `.pandamate/watch`,
+  `firstmate/bin/fm-watch`, or `bin/fm-watch` — gets it as window `watch` of its
+  own `firstmate-<slug>` session the moment the FirstMate launches, and gets it
+  back whenever the window disappears, bounded by a backoff and five consecutive
+  redeploys. The session name is published as `PANDAMATE_TMUX_SESSION` in the
+  launch environment and in the session's tmux environment, so the Watcher and
+  anything the FirstMate opens later agree on one session. Watchers armed by a
+  FirstMate's own Stop hook and adopted sessions are left alone; see
+  [D-028](docs/08-decisions.md).
 - `i` opens a real Pandamate writing surface. A folder path can be pasted or
   dragged there. Pandamate detects a configured FirstMate from project-local
   Claude settings and repository markers, or accepts an explicit
