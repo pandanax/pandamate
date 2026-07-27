@@ -8,15 +8,51 @@ const stableWindowIdPattern = /^@\d+$/;
 const clientTtyPattern = /^\/dev\/(?:ttys?[a-zA-Z0-9]+|pts\/\d+)$/;
 const socketNamePattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 
+/**
+ * tmux pushes `-F` output through its UTF-8 sanitiser, which rewrites every
+ * non-printable byte — a literal tab included — as `_` whenever the tmux client
+ * runs without a UTF-8 ctype. The daemon is started from the macOS app bundle,
+ * whose environment carries no LANG/LC_*, so tab-separated formats collapsed
+ * into a single field there: every `resolveSession` became "Unknown tmux
+ * session" and reconciliation stopped. Formats therefore use a printable
+ * delimiter, and the one free-form field per row (session name, pane path)
+ * always comes last so it may contain the delimiter itself.
+ */
+const fieldSeparator = "|";
+
+function splitRow(row: string, fieldCount: number): readonly string[] | null {
+  const fields: string[] = [];
+  let rest = row;
+  for (let index = 0; index < fieldCount - 1; index += 1) {
+    const boundary = rest.indexOf(fieldSeparator);
+    if (boundary === -1) {
+      return null;
+    }
+    fields.push(rest.slice(0, boundary));
+    rest = rest.slice(boundary + fieldSeparator.length);
+  }
+  fields.push(rest);
+  return fields;
+}
+
 export interface CommandRunner {
   run(executable: string, args: readonly string[]): string;
 }
 
 export class SynchronousCommandRunner implements CommandRunner {
   run(executable: string, args: readonly string[]): string {
+    // Keep tmux in UTF-8 mode so it never sanitises non-ASCII session names or
+    // pane paths on the way out. LC_ALL would override LC_CTYPE, so it is
+    // dropped instead of trusted.
+    const environment: NodeJS.ProcessEnv = {
+      ...process.env,
+      LC_CTYPE: "UTF-8",
+    };
+    delete environment.LC_ALL;
     return execFileSync(executable, [...args], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
+      env: environment,
     }).trim();
   }
 }
@@ -196,12 +232,18 @@ export class TmuxClient {
     const rows = this.run([
       "list-sessions",
       "-F",
-      "#{session_id}\t#{session_name}",
+      `#{session_id}${fieldSeparator}#{session_name}`,
     ]);
-    for (const row of rows.split("\n")) {
-      const [sessionId, name] = row.split("\t");
-      if (name === sessionName && sessionId) {
-        return validateStableSessionId(sessionId);
+    if (rows !== "") {
+      for (const row of rows.split("\n")) {
+        const fields = splitRow(row, 2);
+        if (!fields) {
+          throw new Error(`Malformed tmux session row: ${row}`);
+        }
+        const [sessionId, name] = fields;
+        if (name === sessionName && sessionId) {
+          return validateStableSessionId(sessionId);
+        }
       }
     }
     throw new Error(`Unknown tmux session: ${sessionName}`);
@@ -211,13 +253,14 @@ export class TmuxClient {
     const output = this.run([
       "list-clients",
       "-F",
-      "#{client_tty}\t#{session_name}\t#{session_id}:#{window_id}.#{pane_id}",
+      `#{client_tty}${fieldSeparator}#{session_id}:#{window_id}.#{pane_id}${fieldSeparator}#{session_name}`,
     ]);
     if (output === "") {
       return [];
     }
     return output.split("\n").map((line) => {
-      const [tty, sessionName, paneId] = line.split("\t");
+      const fields = splitRow(line, 3) ?? [];
+      const [tty, paneId, sessionName] = fields;
       if (!tty || !sessionName || !paneId) {
         throw new Error(`Malformed tmux client row: ${line}`);
       }
@@ -363,10 +406,10 @@ export function discoverTmuxSessions(
   const sessionRows = tmux.run([
     "list-sessions",
     "-F",
-    "#{session_id}\t#{session_name}\t#{session_attached}\t#{session_windows}",
+    `#{session_id}${fieldSeparator}#{session_attached}${fieldSeparator}#{session_windows}${fieldSeparator}#{session_name}`,
   ]);
   for (const row of sessionRows.split("\n")) {
-    const [id, name, attached, windows] = row.split("\t");
+    const [id, attached, windows, name] = splitRow(row, 4) ?? [];
     if (!id || !name || attached === undefined || windows === undefined) {
       throw new Error(`Malformed tmux session row: ${row}`);
     }
@@ -385,10 +428,10 @@ export function discoverTmuxSessions(
     "list-panes",
     "-a",
     "-F",
-    "#{session_id}\t#{pane_dead}\t#{pane_current_command}\t#{pane_current_path}",
+    `#{session_id}${fieldSeparator}#{pane_dead}${fieldSeparator}#{pane_current_command}${fieldSeparator}#{pane_current_path}`,
   ]);
   for (const row of paneRows.split("\n")) {
-    const [sessionId, dead, command, path] = row.split("\t");
+    const [sessionId, dead, command, path] = splitRow(row, 4) ?? [];
     if (!sessionId || dead === undefined || !command || path === undefined) {
       throw new Error(`Malformed tmux pane row: ${row}`);
     }
@@ -475,13 +518,13 @@ function listControlWindows(
     "-t",
     controlSessionId,
     "-F",
-    "#{window_index}\t#{window_id}",
+    `#{window_index}${fieldSeparator}#{window_id}`,
   ]);
   if (rows === "") {
     return [];
   }
   return rows.split("\n").map((row) => {
-    const [index, id] = row.split("\t");
+    const [index, id] = splitRow(row, 2) ?? [];
     if (index === undefined || id === undefined) {
       throw new Error(`Malformed tmux window row: ${row}`);
     }
