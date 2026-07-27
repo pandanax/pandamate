@@ -56,6 +56,20 @@ function readLastBoundedLine(path: string, size: number): string | null {
   }
 }
 
+/**
+ * A FirstMate that steps into a subdirectory of its own workspace is still
+ * that FirstMate. Matching `cwd` exactly froze the Fleet on whatever it said
+ * before the first `cd` — for a project whose FirstMate settled into a
+ * subtree, that was its opening line, forever. Anything outside the workspace
+ * still belongs to somebody else.
+ */
+function isInsideWorkspace(cwd: unknown, workspace: string): boolean {
+  return (
+    typeof cwd === "string" &&
+    (cwd === workspace || cwd.startsWith(`${workspace}/`))
+  );
+}
+
 export function firstMateWorkspaceEvidence(
   workspace: string,
   claudeProjectsDirectory = join(homedir(), ".claude", "projects"),
@@ -150,7 +164,9 @@ export function firstMateWorkspaceEvidence(
         const record = entry as Record<string, unknown>;
         if (
           record.type !== "assistant" ||
-          record.cwd !== canonicalWorkspace ||
+          // A worker's reply is not the FirstMate's own word to the captain.
+          record.isSidechain === true ||
+          !isInsideWorkspace(record.cwd, canonicalWorkspace) ||
           typeof record.message !== "object" ||
           record.message === null
         ) {

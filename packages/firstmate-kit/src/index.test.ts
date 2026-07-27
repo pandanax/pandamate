@@ -139,6 +139,53 @@ test("reads an existing FirstMate watcher heartbeat and latest status", () => {
           "Captain, the latest structured reply is ready.",
       },
     );
+
+    // A FirstMate that works from a subdirectory is still that FirstMate, and
+    // a worker's sidechain reply is not its word to the captain.
+    writeFileSync(
+      transcript,
+      [
+        JSON.stringify({
+          type: "assistant",
+          cwd: workspace,
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "before the first cd" }],
+          },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          cwd: join(workspace, "docs-site"),
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "reporting from a subdirectory" }],
+          },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          cwd: join(workspace, "docs-site"),
+          isSidechain: true,
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "a worker talking" }],
+          },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          cwd: `${workspace}-other`,
+          message: {
+            role: "assistant",
+            content: [{ type: "text", text: "a neighbouring workspace" }],
+          },
+        }),
+      ].join("\n"),
+    );
+    utimesSync(transcript, transcriptTime, transcriptTime);
+    assert.equal(
+      firstMateWorkspaceEvidence(workspace, claudeProjects)
+        .lastAssistantMessage,
+      "reporting from a subdirectory",
+    );
   } finally {
     rmSync(workspace, { recursive: true, force: true });
     rmSync(claudeProjects, { recursive: true, force: true });
