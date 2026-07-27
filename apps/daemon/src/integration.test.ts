@@ -457,6 +457,26 @@ test("supervisor starts, stops, and recovers fake FirstMates on isolated tmux", 
       },
     );
     assert.equal(projects.length, 2);
+
+    // What the Fleet's `s` asks for: a project whose runtime is gone is wanted
+    // running again, and the supervisor rebuilds the whole session from durable
+    // state alone — no tmux target survived the stop to address it by.
+    await request(config.socketPath, {
+      protocol: protocolVersion,
+      type: "project.desired.set",
+      idempotencyKey: "test:start-again:beta",
+      payload: { slug: "beta", desiredState: "running" },
+    });
+    projects = await waitForProjects(config.socketPath, (values) => {
+      const beta = values.find((project) => project.slug === "beta");
+      return beta?.actualState === "running" && beta.tmuxTarget !== null;
+    });
+    assert.equal(tmux.hasSession("firstmate-beta"), true);
+    assert.equal(
+      projects.find((project) => project.slug === "beta")?.desiredState,
+      "running",
+    );
+
     await stopDaemon(child, config.socketPath);
   } finally {
     if (child.exitCode === null && child.signalCode === null) {

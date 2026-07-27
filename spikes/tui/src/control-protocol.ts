@@ -1,4 +1,5 @@
 import {
+  isProjectSlug,
   parseInjectedEvents,
   parseInjectedProjects,
   parseInjectedServices,
@@ -12,12 +13,16 @@ export type TuiAction =
   | "session.graceful-shutdown"
   | "session.reset"
   | "session.kill"
+  | "project.start"
   | "pandamate.submit"
   | "pandamate.reload"
   | "pandamate.shutdown-all";
 export type SessionTuiAction = Exclude<
   TuiAction,
-  "pandamate.submit" | "pandamate.reload" | "pandamate.shutdown-all"
+  | "project.start"
+  | "pandamate.submit"
+  | "pandamate.reload"
+  | "pandamate.shutdown-all"
 >;
 
 export type TuiActionRequest =
@@ -25,6 +30,16 @@ export type TuiActionRequest =
       readonly type: "action.request";
       readonly action: SessionTuiAction;
       readonly sessionName: string;
+    }
+  /**
+   * Starting a stopped FirstMate is the one project action with no runtime to
+   * address: its tmux session is gone, which is exactly why it is being asked
+   * for. It travels by durable project slug instead.
+   */
+  | {
+      readonly type: "action.request";
+      readonly action: "project.start";
+      readonly slug: string;
     }
   | {
       readonly type: "action.request";
@@ -44,6 +59,7 @@ export interface TuiActionResult {
   readonly type: "action.result";
   readonly action: TuiAction;
   readonly sessionName?: string;
+  readonly slug?: string;
   readonly success: boolean;
   readonly message: string;
 }
@@ -109,17 +125,19 @@ function isTuiAction(value: unknown): value is TuiAction {
     value === "session.graceful-shutdown" ||
     value === "session.reset" ||
     value === "session.kill" ||
+    value === "project.start" ||
     value === "pandamate.submit" ||
     value === "pandamate.reload" ||
     value === "pandamate.shutdown-all"
   );
 }
 
-function isPandamateAction(value: TuiAction): boolean {
+function isSessionAction(value: TuiAction): boolean {
   return (
-    value === "pandamate.submit" ||
-    value === "pandamate.reload" ||
-    value === "pandamate.shutdown-all"
+    value === "session.open" ||
+    value === "session.graceful-shutdown" ||
+    value === "session.reset" ||
+    value === "session.kill"
   );
 }
 
@@ -151,6 +169,16 @@ export function parseTuiActionRequest(value: unknown): TuiActionRequest {
   if (candidate.action === "pandamate.shutdown-all") {
     return { type: "action.request", action: candidate.action };
   }
+  if (candidate.action === "project.start") {
+    if (!isProjectSlug(candidate.slug)) {
+      throw new Error("Invalid Pandamate project slug");
+    }
+    return {
+      type: "action.request",
+      action: candidate.action,
+      slug: candidate.slug,
+    };
+  }
   if (!isSafeSessionName(candidate.sessionName)) {
     throw new Error("Invalid TUI action request");
   }
@@ -169,8 +197,9 @@ export function parseTuiActionResult(value: unknown): TuiActionResult {
   if (
     candidate.type !== "action.result" ||
     !isTuiAction(candidate.action) ||
-    (!isPandamateAction(candidate.action) &&
+    (isSessionAction(candidate.action) &&
       !isSafeSessionName(candidate.sessionName)) ||
+    (candidate.action === "project.start" && !isProjectSlug(candidate.slug)) ||
     typeof candidate.success !== "boolean" ||
     typeof candidate.message !== "string" ||
     candidate.message.length > 240
@@ -182,10 +211,11 @@ export function parseTuiActionResult(value: unknown): TuiActionResult {
     action: candidate.action,
     success: candidate.success,
     message: candidate.message,
+    ...(typeof candidate.sessionName === "string"
+      ? { sessionName: candidate.sessionName }
+      : {}),
+    ...(isProjectSlug(candidate.slug) ? { slug: candidate.slug } : {}),
   };
-  if (typeof candidate.sessionName === "string") {
-    return { ...result, sessionName: candidate.sessionName };
-  }
   return result;
 }
 

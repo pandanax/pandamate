@@ -517,6 +517,58 @@ child.on("message", async (value: unknown) => {
     return;
   }
 
+  /**
+   * Start a project whose runtime is gone. There is no tmux session to address
+   * and no tab to reopen — the FirstMate is deployed again from durable state,
+   * exactly the way it was first started: the daemon records that the project
+   * is wanted running and the supervisor rebuilds the session, the FirstMate,
+   * and its Watcher on its next pass. Only projects the daemon actually knows
+   * are startable, so a discovered foreign session can never be launched here.
+   */
+  if (request.action === "project.start") {
+    try {
+      const project = durableProjects.find(
+        (candidate) => candidate.slug === request.slug,
+      );
+      if (!project) {
+        throw new Error(`${request.slug} is not a registered Pandamate project.`);
+      }
+      const response = await requestDaemon(config.socketPath, {
+        protocol: protocolVersion,
+        requestId: `req_tui_${randomUUID()}`,
+        type: "project.desired.set",
+        idempotencyKey: `tui:${randomUUID()}`,
+        payload: { slug: project.slug, desiredState: "running" },
+      });
+      if (!response.ok) {
+        throw new Error(response.error.message);
+      }
+      await refreshProjection();
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        slug: project.slug,
+        success: true,
+        message: `Starting ${project.slug} again in ${project.workspace}; the FirstMate is being deployed.`.slice(
+          0,
+          240,
+        ),
+      });
+    } catch (error) {
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        slug: request.slug,
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : `Pandamate could not start ${request.slug}.`,
+      });
+    }
+    return;
+  }
+
   if (request.action === "pandamate.submit") {
     try {
       const submittedPath = pathOnlyInput(request.text);

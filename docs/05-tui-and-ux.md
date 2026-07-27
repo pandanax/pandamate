@@ -106,6 +106,7 @@ Global:
 | `:` | deterministic CLI command |
 | `i` | focus Pandamate input |
 | `o` | open selected tmux session in a new iTerm window |
+| `s` | start the selected FirstMate again after it stopped |
 | `g` | ask selected FirstMate to shut down gracefully |
 | `r` | reset selected FirstMate: graceful stop, then deploy again |
 | `m` | message selected FirstMate |
@@ -162,6 +163,19 @@ actions are:
   service windows again without closing the main pane;
 - `x`: request stopping the entire selected tmux session;
 - `Esc`: return to the Fleet.
+
+A stopped project has none of those: its tmux session is gone, and its Home tab
+went with it, so `o` has nothing to reopen. Its single action is `s` — start
+this FirstMate again. It is not confirmed, because it creates work rather than
+destroying it, and `x` undoes it. The request carries the durable project slug
+instead of a session name, the daemon records the project as wanted running,
+and the supervisor deploys session, FirstMate, and Watcher on its next pass;
+the row reports `starting` until then, and `o` opens its tab again once it is
+up. A Fleet item Pandamate merely discovered has no durable slug and says so
+rather than pretending it can be started. The project footer shows only the
+actions that item can actually perform now, so a stopped FirstMate offers `s`
+and never `o`, `g`, `r`, or `x`. See
+[D-029](08-decisions.md#d-029--a-stopped-firstmate-is-started-again-by-slug-from-the-fleet).
 
 Graceful shutdown and immediate stopping each open a separate confirmation
 surface naming the exact target. Graceful shutdown asks the FirstMate to

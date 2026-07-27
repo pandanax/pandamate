@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   formatElapsedTime,
+  isProjectSlug,
   layoutForWidth,
   moveSelection,
   parseInjectedEvents,
@@ -44,6 +45,7 @@ test("injected project JSON is validated before use", () => {
       JSON.stringify([
         {
           name: "firstmate",
+          slug: null,
           profile: null,
           sessionName: "firstmate",
           state: "running",
@@ -57,6 +59,7 @@ test("injected project JSON is validated before use", () => {
     [
       {
         name: "firstmate",
+        slug: null,
         profile: null,
         sessionName: "firstmate",
         state: "running",
@@ -68,6 +71,46 @@ test("injected project JSON is validated before use", () => {
     ],
   );
   assert.throws(() => parseInjectedProjects('{"name":"unchecked"}'));
+});
+
+test("a Fleet item carries the durable slug it can be started again by", () => {
+  const projects = parseInjectedProjects(
+    JSON.stringify([
+      {
+        name: "Mandala",
+        slug: "mandala",
+        profile: "FirstMateGit",
+        sessionName: null,
+        state: "stopped",
+        summary: "Stopped; retained in Fleet for a future start",
+        lastMessage: null,
+        heartbeatSeconds: null,
+        tmuxWindowCount: null,
+      },
+    ]),
+  );
+  assert.equal(projects[0]?.slug, "mandala");
+  assert.ok(isProjectSlug("mandala"));
+  for (const invalid of ["Mandala", "", "-mandala", "mandala/../etc"]) {
+    assert.equal(isProjectSlug(invalid), false);
+  }
+  assert.throws(() =>
+    parseInjectedProjects(
+      JSON.stringify([
+        {
+          name: "Mandala",
+          slug: "Not A Slug",
+          profile: "FirstMateGit",
+          sessionName: null,
+          state: "stopped",
+          summary: "",
+          lastMessage: null,
+          heartbeatSeconds: null,
+          tmuxWindowCount: null,
+        },
+      ]),
+    ),
+  );
 });
 
 test("injected event journal JSON is bounded and validated", () => {

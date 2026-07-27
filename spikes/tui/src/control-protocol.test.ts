@@ -55,6 +55,55 @@ test("control protocol accepts bounded project actions and results", () => {
   );
 });
 
+test("starting a stopped FirstMate travels by slug, not by session", () => {
+  assert.deepEqual(
+    parseTuiActionRequest({
+      type: "action.request",
+      action: "project.start",
+      slug: "mandala",
+    }),
+    { type: "action.request", action: "project.start", slug: "mandala" },
+  );
+  // A stopped project has no session, so a start request must not be
+  // rejected for missing one — and must not be accepted without a valid slug.
+  for (const invalid of [
+    { type: "action.request", action: "project.start" },
+    { type: "action.request", action: "project.start", slug: "Mandala" },
+    { type: "action.request", action: "project.start", slug: "../etc" },
+    {
+      type: "action.request",
+      action: "project.start",
+      sessionName: "firstmate-mandala",
+    },
+  ]) {
+    assert.throws(() => parseTuiActionRequest(invalid));
+  }
+  assert.deepEqual(
+    parseTuiActionResult({
+      type: "action.result",
+      action: "project.start",
+      slug: "mandala",
+      success: true,
+      message: "Starting mandala again.",
+    }),
+    {
+      type: "action.result",
+      action: "project.start",
+      slug: "mandala",
+      success: true,
+      message: "Starting mandala again.",
+    },
+  );
+  assert.throws(() =>
+    parseTuiActionResult({
+      type: "action.result",
+      action: "project.start",
+      success: true,
+      message: "Starting an unnamed project.",
+    }),
+  );
+});
+
 test("control protocol accepts bounded Pandamate input", () => {
   assert.deepEqual(
     parseTuiActionRequest({
@@ -83,6 +132,7 @@ test("control protocol validates live projection updates", () => {
     projects: [
       {
         name: "Docs",
+        slug: "docs",
         profile: "DocResearch",
         sessionName: "firstmate-docs",
         state: "starting",

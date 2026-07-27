@@ -132,6 +132,39 @@ try {
   const sendKey = (key: string): void => {
     tmux.run(["send-keys", "-t", tmux.resolveSession(tui), "-l", key]);
   };
+
+  // A stopped FirstMate has no tmux session left, so `o`, `g`, `r`, and `x`
+  // have nothing to address: `s` is the way back, and the screen has to offer
+  // it without the ones that would fail.
+  tmux.sendLiteralKey(tui, "j");
+  tmux.sendLiteralKey(tui, "j");
+  await waitFor(
+    () => tmux.capturePane(tui).includes("SELECTED: PERSONAL SITE"),
+    "selecting a stopped FirstMate in the Fleet",
+  );
+  tmux.run(["send-keys", "-t", tmux.resolveSession(tui), "Enter"]);
+  await waitFor(
+    () =>
+      tmux.capturePane(tui).includes("PROJECT: PERSONAL SITE") &&
+      tmux.capturePane(tui).includes("[s] Start this FirstMate again") &&
+      tmux.capturePane(tui).includes("s start FirstMate"),
+    "the start action offered for a stopped FirstMate",
+  );
+  tmux.sendLiteralKey(tui, "s");
+  await waitFor(
+    () => tmux.capturePane(tui).includes("the FirstMate is being deployed"),
+    "a start request answered by the host",
+  );
+  await waitFor(
+    () => tmux.capturePane(tui).includes("state: starting"),
+    "the started project reported as starting",
+  );
+  tmux.run(["send-keys", "-t", tmux.resolveSession(tui), "Escape"]);
+  await waitFor(
+    () => tmux.capturePane(tui).includes("LIVE ACTIVITY"),
+    "return from the project view to Home",
+  );
+
   sendKey("X");
   await waitFor(
     () =>
@@ -183,6 +216,7 @@ try {
       "live Fleet projection: PASS",
       "Fleet/services separation: PASS",
       "Pandamate services screen: PASS",
+      "start a stopped FirstMate from its project view: PASS",
       "full shutdown confirmation and live progress: PASS",
       "keyboard input: PASS",
       "alternate-screen cleanup: PASS",

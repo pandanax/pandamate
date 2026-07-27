@@ -29,6 +29,9 @@ export function projectSummariesFromTmux(
         : "";
     return {
       name: session.name,
+      // A discovered session is not a durable project: Pandamate never
+      // registered it, so it has no slug to be started again by.
+      slug: null,
       profile: null,
       sessionName: session.name,
       state: session.livePaneCount > 0 ? "running" : "stopped",
@@ -67,6 +70,7 @@ export function projectSummariesFromDaemon(
     );
     return {
       name: project.title,
+      slug: project.slug,
       profile: profileForProjectKind(project.kind),
       sessionName:
         project.tmuxTarget === null ? null : project.tmuxSessionName,

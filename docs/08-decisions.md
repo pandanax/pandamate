@@ -222,6 +222,24 @@ changes must update this file and the affected specification.
   created itself.
 - **Status:** accepted.
 
+### D-029 — A stopped FirstMate is started again by slug, from the Fleet
+
+- **Decision:** Durable Fleet identity ([D-020](#d-020--fleet-identity-survives-shutdown-reset-is-an-in-session-cycle))
+  is actionable, not only visible. `s` in a project's view asks Pandamate to
+  deploy that FirstMate again. Every other project action addresses a tmux
+  session, which is exactly what a stopped project no longer has — its tab was
+  destroyed with its session, so `o` cannot reach it either. The start request
+  therefore travels by durable project slug (`project.start`), and the host
+  answers it the same way onboarding does: the daemon records the project as
+  wanted running and the supervisor rebuilds session, FirstMate, and Watcher on
+  its next pass. Pandamate never launches the runtime from the TUI process
+  itself, so one lifecycle owner remains.
+- **Excluded on purpose:** starting is not confirmed like `g`, `r`, and `x`.
+  Those destroy running work; this creates it and is undone by `x`. A Fleet item
+  Pandamate only discovered has no slug and stays unstartable — Pandamate does
+  not know how to build a session it never created.
+- **Status:** accepted.
+
 ## Proposed; validate in Phase 0
 
 ### D-012 — TypeScript core

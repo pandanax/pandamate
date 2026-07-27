@@ -60,6 +60,16 @@ Phase 1 has a working vertical slice:
   project identity survives the runtime session; `r` asks a running FirstMate
   to gracefully stop its current crew and then deploy Watcher and service
   windows again without closing the main pane.
+- `s` starts a stopped FirstMate again from its project view. A stopped project
+  has no tmux session and no Home tab left, so `o`, `g`, `r`, and `x` have
+  nothing to address; the start request travels by durable project slug
+  (`project.start`) instead, the daemon marks the project as wanted running,
+  and the supervisor rebuilds session, FirstMate, and Watcher on its next pass.
+  It is not confirmed — it creates work rather than destroying it, and `x`
+  undoes it. The row reports `starting` immediately and `o` opens its tab again
+  once it is up. Fleet items Pandamate only discovered carry no slug and stay
+  unstartable. The project footer now lists only what that item can actually do
+  now. Decision: [D-029](docs/08-decisions.md).
 - `X` closes all of Pandamate, gracefully, in one action — `pandamate
   shutdown-all` does the same headlessly. The daemon is drained first (`system.
   drain`: supervision pauses and every project is durably marked stopped, so
@@ -118,8 +128,10 @@ fixture session from an isolated tmux server, restarts the daemon, and proves
 that project and event JSON are identical after restart. TypeScript check and
 the complete test suite pass.
 The real tmux/OpenTUI smoke passes resize, Unicode, keyboard navigation, Home →
-Event Journal → Home, live Fleet updates without a TUI restart, and
-alternate-screen cleanup.
+Event Journal → Home, live Fleet updates without a TUI restart, starting a
+stopped FirstMate from its project view, and alternate-screen cleanup. The
+daemon integration test starts a stopped project again the way `s` does and
+proves the supervisor rebuilds its tmux session from durable state alone.
 
 Panda explicitly authorized Claude Code, Claude Agent SDK, and model
 integration on 2026-07-26 and asked that the project be carried through the
@@ -204,9 +216,10 @@ non-control tmux sessions in the Fleet. Sessions named `pandamate:*` are
 control-plane surfaces and stay out of the project Fleet.
 
 In the discovered Fleet, `Enter` opens a Project view, `o` opens that tmux
-session in a new iTerm window while Pandamate stays visible, and `x` opens an
-explicit stop-session confirmation. All active shortcuts are shown in the
-contextual footer. From Home, `e` opens the separate durable Event Journal.
+session in a new iTerm window while Pandamate stays visible, `x` opens an
+explicit stop-session confirmation, and `s` starts a registered project whose
+runtime has stopped. All active shortcuts are shown in the contextual footer.
+From Home, `e` opens the separate durable Event Journal.
 
 The deterministic CLI currently supports:
 

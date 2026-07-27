@@ -2,6 +2,12 @@ export type LayoutMode = "compact" | "standard" | "wide";
 
 export interface ProjectSummary {
   readonly name: string;
+  /**
+   * The durable project this Fleet item belongs to, or null for a tmux session
+   * Pandamate only discovered. It is the identity that outlives the runtime, so
+   * it is the only handle a stopped item can be started again by.
+   */
+  readonly slug: string | null;
   readonly profile: "FirstMateArc" | "FirstMateGit" | "DocResearch" | null;
   readonly sessionName: string | null;
   readonly state:
@@ -45,6 +51,7 @@ export interface EventSummary {
 export const demoProjects: readonly ProjectSummary[] = [
   {
     name: "Mandala",
+    slug: "mandala",
     profile: "FirstMateGit",
     sessionName: null,
     state: "working",
@@ -55,6 +62,7 @@ export const demoProjects: readonly ProjectSummary[] = [
   },
   {
     name: "ARC-1234",
+    slug: "arc-1234",
     profile: "FirstMateArc",
     sessionName: null,
     state: "waiting",
@@ -65,6 +73,7 @@ export const demoProjects: readonly ProjectSummary[] = [
   },
   {
     name: "Legal",
+    slug: "legal",
     profile: "DocResearch",
     sessionName: null,
     state: "sleeping",
@@ -75,6 +84,7 @@ export const demoProjects: readonly ProjectSummary[] = [
   },
   {
     name: "Personal site",
+    slug: "personal-site",
     profile: "FirstMateGit",
     sessionName: null,
     state: "stopped",
@@ -87,6 +97,7 @@ export const demoProjects: readonly ProjectSummary[] = [
 
 export const emptyProject: ProjectSummary = {
   name: "No supervised sessions",
+  slug: null,
   profile: null,
   sessionName: null,
   state: "stopped",
@@ -108,6 +119,17 @@ const projectStates = new Set<ProjectSummary["state"]>([
   "stopped",
 ]);
 
+/**
+ * The same shape `@pandamate/runtime-tmux` validates project slugs against.
+ * The TUI runs as its own process without workspace dependencies, so the rule
+ * is restated here rather than imported.
+ */
+const projectSlugPattern = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
+
+export function isProjectSlug(value: unknown): value is string {
+  return typeof value === "string" && projectSlugPattern.test(value);
+}
+
 function isProjectSummary(value: unknown): value is ProjectSummary {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -117,6 +139,7 @@ function isProjectSummary(value: unknown): value is ProjectSummary {
     typeof candidate.name === "string" &&
     candidate.name.length > 0 &&
     candidate.name.length <= 80 &&
+    (candidate.slug === null || isProjectSlug(candidate.slug)) &&
     (candidate.profile === null ||
       candidate.profile === "FirstMateArc" ||
       candidate.profile === "FirstMateGit" ||

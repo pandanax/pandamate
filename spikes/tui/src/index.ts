@@ -80,6 +80,16 @@ function selectedProject(model: DeckModel): ProjectSummary {
   return model.projects[model.selectedIndex] ?? emptyProject;
 }
 
+/**
+ * A stopped FirstMate keeps its durable identity but loses its runtime — and
+ * with it every action that addresses a tmux session, including the tab `o`
+ * would have opened. Its slug is what remains, so it is what starting it again
+ * is keyed on.
+ */
+function canStart(project: ProjectSummary): boolean {
+  return project.slug !== null && project.sessionName === null;
+}
+
 function fleetPanel(model: DeckModel, onSelect: (index: number) => void) {
   return Box(
     {
@@ -272,7 +282,11 @@ function header(model: DeckModel, mode: string) {
   );
 }
 
-function footer(screen: Screen, message: string | null) {
+function footer(
+  screen: Screen,
+  message: string | null,
+  project: ProjectSummary,
+) {
   const help =
     screen === "home"
       ? "i write · s services · ↑↓/jk select · Enter project · e events · R reload · X close all · q quit"
@@ -287,7 +301,11 @@ function footer(screen: Screen, message: string | null) {
       : screen === "services"
         ? "Pandamate control plane · Esc back home · R reload · q quit"
       : screen === "project"
-        ? "o open · g graceful · r reset · x kill · Esc back · R reload · q quit"
+        ? // The footer promises only what this project can actually do now: a
+          // stopped FirstMate has no session for open, graceful, reset, or kill.
+          canStart(project)
+          ? "s start FirstMate · Esc back · R reload · q quit"
+          : "o open · g graceful · r reset · x kill · Esc back · R reload · q quit"
         : screen === "confirm-graceful"
           ? "y confirm graceful shutdown · n/Esc cancel · q quit"
           : screen === "confirm-reset"
@@ -631,6 +649,12 @@ function projectPanel(project: ProjectSummary, screen: Screen) {
             gap: 1,
           },
           Text({
+            content: canStart(project)
+              ? "[s] Start this FirstMate again"
+              : "[s] Start again — available once this FirstMate is stopped",
+            fg: canStart(project) ? colors.bamboo : colors.muted,
+          }),
+          Text({
             content: project.profile
               ? "[o] Open as a tab of this Pandamate window"
               : "[o] Open in a new iTerm window",
@@ -700,7 +724,7 @@ function buildDeck(
       screen === "shutdown"
         ? shutdownPanel(shutdownProgress)
         : shutdownConfirmPanel(model),
-      footer(screen, message),
+      footer(screen, message, project),
     );
   }
 
@@ -717,7 +741,7 @@ function buildDeck(
       },
       header(model, "compose"),
       pandamateInputPanel(pandamateInput),
-      footer(screen, message),
+      footer(screen, message, project),
     );
   }
 
@@ -734,7 +758,7 @@ function buildDeck(
       },
       header(model, "event journal"),
       eventJournalPanel(events, selectedEventIndex),
-      footer(screen, message),
+      footer(screen, message, project),
     );
   }
 
@@ -751,7 +775,7 @@ function buildDeck(
       },
       header(model, "services"),
       servicesPanel(model.services),
-      footer(screen, message),
+      footer(screen, message, project),
     );
   }
 
@@ -768,7 +792,7 @@ function buildDeck(
       },
       header(model, mode),
       projectPanel(project, screen),
-      footer(screen, message),
+      footer(screen, message, project),
     );
   }
 
@@ -832,7 +856,7 @@ function buildDeck(
     header(model, mode),
     main,
     lower,
-    footer(screen, message),
+    footer(screen, message, project),
   );
 }
 
@@ -960,6 +984,40 @@ function requestAction(
           ? `Requesting reset of ${project.sessionName}…`
         : `Stopping ${project.sessionName}…`;
   process.send(request);
+  render();
+}
+
+/**
+ * Ask Pandamate to deploy a stopped project's FirstMate again. The durable
+ * project is the only thing left of it, so the request travels by slug: the
+ * daemon marks the project as wanted running and the supervisor builds the
+ * whole runtime back — tmux session, FirstMate, Watcher.
+ */
+function requestStart(project: ProjectSummary): void {
+  if (!project.slug) {
+    actionMessage =
+      "Pandamate does not own this session, so it cannot start it.";
+    render();
+    return;
+  }
+  if (project.sessionName) {
+    actionMessage = `${project.name} is already running; press r to reset it.`;
+    render();
+    return;
+  }
+  if (!process.send) {
+    actionMessage =
+      "Control channel unavailable. Start with spike:tui:discovered.";
+    render();
+    return;
+  }
+  const request: TuiActionRequest = {
+    type: "action.request",
+    action: "project.start",
+    slug: project.slug,
+  };
+  process.send(request);
+  actionMessage = `Starting ${project.name} again…`;
   render();
 }
 
@@ -1191,6 +1249,8 @@ renderer.keyInput.on("keypress", (key) => {
       screen = "home";
       actionMessage = null;
       render();
+    } else if (key.name === "s") {
+      requestStart(project);
     } else if (key.name === "o") {
       requestAction("session.open", project);
     } else if (key.name === "g" && project.sessionName) {
@@ -1293,6 +1353,19 @@ process.on("message", (value: unknown) => {
           : project,
       );
       screen = "home";
+    }
+    if (result.success && result.action === "project.start") {
+      // The supervisor needs a reconciliation pass before the projection shows
+      // the new runtime; until then the row says what was asked of it.
+      projects = projects.map((project) =>
+        project.slug === result.slug
+          ? {
+              ...project,
+              state: "starting",
+              summary: "Start requested; Pandamate is deploying the FirstMate.",
+            }
+          : project,
+      );
     }
     if (result.success && result.action === "session.kill") {
       projects = projects.map((project) =>

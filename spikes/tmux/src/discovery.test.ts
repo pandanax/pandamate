@@ -41,6 +41,7 @@ test("discovered live sessions are running, not falsely working", () => {
     [
       {
         name: "firstmate",
+        slug: null,
         profile: null,
         sessionName: "firstmate",
         state: "running",
@@ -129,6 +130,8 @@ test("daemon projects remain in Fleet after their runtime stops", () => {
   assert.equal(summary[0]?.profile, "FirstMateGit");
   assert.equal(summary[0]?.sessionName, null);
   assert.equal(summary[0]?.heartbeatSeconds, 5);
+  // The runtime is gone, so the slug is the only handle left to start it by.
+  assert.equal(summary[0]?.slug, "mandala");
 });
 
 test("Fleet overlays existing FirstMate heartbeat and status evidence", () => {

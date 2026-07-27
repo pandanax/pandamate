@@ -17,6 +17,7 @@ const timer = setTimeout(() => {
       ...demoProjects,
       {
         name: "Live Project",
+        slug: "live-project",
         profile: "FirstMateGit",
         sessionName: "firstmate-live-project",
         state: "starting",
@@ -58,15 +59,30 @@ const timer = setTimeout(() => {
 }, 500);
 
 child.on("message", (value: unknown) => {
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+  const action = (value as Record<string, unknown>).action;
+
+  // Starting a stopped FirstMate is answered the way the real launcher answers
+  // it: the daemon has recorded the project as wanted running, and the runtime
+  // itself only appears on a later supervisor pass.
+  if (action === "project.start") {
+    child.send({
+      type: "action.result",
+      action: "project.start",
+      slug: (value as Record<string, unknown>).slug,
+      success: true,
+      message: "Starting personal-site again; the FirstMate is being deployed.",
+    });
+    return;
+  }
+
   // A full shutdown is driven by the host, so the smoke plays that part: it
   // answers the request with the progress the real launcher would push, ending
   // in a failure — the one phase that hands the keyboard back, so the smoke can
   // leave the screen again.
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    (value as Record<string, unknown>).action !== "pandamate.shutdown-all"
-  ) {
+  if (action !== "pandamate.shutdown-all") {
     return;
   }
   child.send({
