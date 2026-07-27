@@ -574,6 +574,72 @@ export function controlTabForSession(
   return tab ? { index: tab.index, name: tab.name } : null;
 }
 
+const statusColors = {
+  panel: "#1B1E26",
+  muted: "#8C969E",
+  softWhite: "#E8E6DF",
+  cyan: "#62D8E8",
+  purple: "#B6A0FF",
+} as const;
+
+/**
+ * The tmux keys a Pandamate window is driven with. FirstMates take over their
+ * tab completely, so without this line the way back to Home is invisible.
+ */
+const controlKeyHints = [
+  "^b 0 home",
+  "^b 1-9 tab",
+  "^b n/p next/prev",
+  "^b w list",
+  "^b [ scroll (q exits)",
+  "^b d detach",
+  "^b ? keys",
+].join(" · ");
+
+/**
+ * Dress a Pandamate session's status line: tabs on the left, the tmux key
+ * hints on the right, always visible. Session-scoped on purpose — Pandamate
+ * styles the windows it owns and never rewrites global tmux state.
+ */
+export function configureControlStatusBar(
+  tmux: Pick<TmuxClient, "run">,
+  controlSessionId: string,
+): void {
+  validateStableSessionId(controlSessionId);
+  const sessionOptions: ReadonlyArray<readonly [string, string]> = [
+    ["status", "on"],
+    ["status-position", "bottom"],
+    ["status-justify", "left"],
+    ["status-style", `bg=${statusColors.panel},fg=${statusColors.muted}`],
+    ["status-left-length", "24"],
+    ["status-right-length", "200"],
+    [
+      "status-left",
+      `#[fg=${statusColors.purple},bold] 🐼 PANDAMATE #[default]`,
+    ],
+    ["status-right", `#[fg=${statusColors.muted}]${controlKeyHints} `],
+  ];
+  for (const [name, value] of sessionOptions) {
+    tmux.run(["set-option", "-t", controlSessionId, name, value]);
+  }
+
+  // The tab strip is drawn from each window's own options, so a session-scoped
+  // set would only ever style the window that happens to be current.
+  const windowOptions: ReadonlyArray<readonly [string, string]> = [
+    ["window-status-format", `#[fg=${statusColors.softWhite}] #I #W `],
+    [
+      "window-status-current-format",
+      `#[fg=${statusColors.panel},bg=${statusColors.cyan},bold] #I #W #[default]`,
+    ],
+    ["window-status-separator", ""],
+  ];
+  for (const window of listControlWindows(tmux, controlSessionId)) {
+    for (const [name, value] of windowOptions) {
+      tmux.run(["set-window-option", "-t", window.id, name, value]);
+    }
+  }
+}
+
 /**
  * Open a FirstMate project session as a tab inside the attached Pandamate home
  * session instead of spawning a separate terminal window. Window 0 of the
@@ -632,7 +698,7 @@ export function openSessionAsControlTab(
     tmux.run(["rename-window", "-t", targetWindow, slug]);
   }
 
-  tmux.run(["set-option", "-t", controlSessionId, "status", "on"]);
+  configureControlStatusBar(tmux, controlSessionId);
   tmux.run(["select-window", "-t", targetWindow]);
   return projectSessionId;
 }
@@ -640,11 +706,12 @@ export function openSessionAsControlTab(
 /**
  * Close a FirstMate's Pandamate home tab without stopping the FirstMate. The
  * linked window is unlinked from `pandamate:home` while the project keeps
- * running in its own durable session, focus returns to the home base window,
- * and once the last project tab is gone the tab strip is hidden again so home
- * is a clean full-screen surface. Idempotent and a safe no-op when home is not
- * running, the project session is already gone, or it was never opened as a
- * tab. Returns true only when a tab was actually unlinked.
+ * running in its own durable session and focus returns to the home base
+ * window. The status line stays up even with no tabs left — it carries the
+ * tmux key hints, which are least discoverable exactly when there is nothing
+ * else on it. Idempotent and a safe no-op when home is not running, the
+ * project session is already gone, or it was never opened as a tab. Returns
+ * true only when a tab was actually unlinked.
  */
 export function closeControlTab(
   tmux: Pick<TmuxClient, "run" | "resolveSession">,
@@ -695,10 +762,6 @@ export function closeControlTab(
     (min, window) => Math.min(min, window.index),
     linked.index,
   );
-  const projectTabsLeft = remaining.some((window) => window.index !== homeIndex);
-  if (!projectTabsLeft) {
-    tmux.run(["set-option", "-t", controlSessionId, "status", "off"]);
-  }
   tmux.run(["select-window", "-t", `${controlSessionId}:${homeIndex}`]);
   return true;
 }

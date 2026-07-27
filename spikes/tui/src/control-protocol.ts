@@ -12,8 +12,12 @@ export type TuiAction =
   | "session.graceful-shutdown"
   | "session.reset"
   | "session.kill"
-  | "pandamate.submit";
-export type SessionTuiAction = Exclude<TuiAction, "pandamate.submit">;
+  | "pandamate.submit"
+  | "pandamate.reload";
+export type SessionTuiAction = Exclude<
+  TuiAction,
+  "pandamate.submit" | "pandamate.reload"
+>;
 
 export type TuiActionRequest =
   | {
@@ -25,6 +29,10 @@ export type TuiActionRequest =
       readonly type: "action.request";
       readonly action: "pandamate.submit";
       readonly text: string;
+    }
+  | {
+      readonly type: "action.request";
+      readonly action: "pandamate.reload";
     };
 
 export interface TuiActionResult {
@@ -62,7 +70,8 @@ function isTuiAction(value: unknown): value is TuiAction {
     value === "session.graceful-shutdown" ||
     value === "session.reset" ||
     value === "session.kill" ||
-    value === "pandamate.submit"
+    value === "pandamate.submit" ||
+    value === "pandamate.reload"
   );
 }
 
@@ -88,6 +97,9 @@ export function parseTuiActionRequest(value: unknown): TuiActionRequest {
       text: candidate.text,
     };
   }
+  if (candidate.action === "pandamate.reload") {
+    return { type: "action.request", action: candidate.action };
+  }
   if (!isSafeSessionName(candidate.sessionName)) {
     throw new Error("Invalid TUI action request");
   }
@@ -107,6 +119,7 @@ export function parseTuiActionResult(value: unknown): TuiActionResult {
     candidate.type !== "action.result" ||
     !isTuiAction(candidate.action) ||
     (candidate.action !== "pandamate.submit" &&
+      candidate.action !== "pandamate.reload" &&
       !isSafeSessionName(candidate.sessionName)) ||
     typeof candidate.success !== "boolean" ||
     typeof candidate.message !== "string" ||

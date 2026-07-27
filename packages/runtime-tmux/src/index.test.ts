@@ -5,6 +5,7 @@ import {
   attachCommandForSessionId,
   discoverTmuxSessions,
   closeControlTab,
+  configureControlStatusBar,
   controlTabForSession,
   isPandamateControlSession,
   openSessionAsControlTab,
@@ -310,12 +311,46 @@ function tabTmux(
   };
 }
 
+function structuralCalls(calls: readonly string[][]): readonly string[][] {
+  return calls.filter(
+    (call) =>
+      call[0] !== "set-option" &&
+      !(call[0] === "set-window-option" && call[3]?.startsWith("window-status")),
+  );
+}
+
+test("dresses a Pandamate session with tabs and always-visible key hints", () => {
+  const tmux = tabTmux("@7", "0|@1|home");
+  configureControlStatusBar(tmux, "$4");
+
+  const options = new Map(
+    tmux.calls
+      .filter(
+        (call) => call[0] === "set-option" || call[0] === "set-window-option",
+      )
+      .map((call) => [call[3] ?? "", call[4] ?? ""]),
+  );
+  assert.equal(options.get("status"), "on");
+  assert.equal(options.get("status-position"), "bottom");
+  assert.match(options.get("status-right") ?? "", /\^b 0 home/);
+  assert.match(options.get("status-right") ?? "", /\^b d detach/);
+  assert.match(options.get("window-status-current-format") ?? "", /#I #W/);
+  // The tab strip reads each window's own options, never the session's.
+  assert.deepEqual(
+    tmux.calls
+      .filter((call) => call[0] === "set-window-option")
+      .map((call) => call[2]),
+    ["@1", "@1", "@1"],
+  );
+  assert.throws(() => configureControlStatusBar(tmux, "pandamate:home"));
+});
+
 test("links a FirstMate window as a fresh Pandamate home tab and shows tabs", () => {
   const tmux = tabTmux("@7", "0|@1|home");
   const result = openSessionAsControlTab(tmux, "firstmate-mandala");
 
   assert.equal(result, "$9");
-  assert.deepEqual(tmux.calls, [
+  assert.deepEqual(structuralCalls(tmux.calls), [
     ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
     [
       "list-windows",
@@ -327,7 +362,13 @@ test("links a FirstMate window as a fresh Pandamate home tab and shows tabs", ()
     ["link-window", "-s", "$9:0", "-t", "$4:1"],
     ["set-window-option", "-t", "$4:1", "automatic-rename", "off"],
     ["rename-window", "-t", "$4:1", "mandala"],
-    ["set-option", "-t", "$4", "status", "on"],
+    [
+      "list-windows",
+      "-t",
+      "$4",
+      "-F",
+      "#{window_index}|#{window_id}|#{window_name}",
+    ],
     ["select-window", "-t", "$4:1"],
   ]);
 });
@@ -337,7 +378,7 @@ test("re-opening an already linked project just selects its existing tab", () =>
   const result = openSessionAsControlTab(tmux, "firstmate-mandala");
 
   assert.equal(result, "$9");
-  assert.deepEqual(tmux.calls, [
+  assert.deepEqual(structuralCalls(tmux.calls), [
     ["display-message", "-p", "-t", "$9:0", "#{window_id}"],
     [
       "list-windows",
@@ -346,7 +387,13 @@ test("re-opening an already linked project just selects its existing tab", () =>
       "-F",
       "#{window_index}|#{window_id}|#{window_name}",
     ],
-    ["set-option", "-t", "$4", "status", "on"],
+    [
+      "list-windows",
+      "-t",
+      "$4",
+      "-F",
+      "#{window_index}|#{window_id}|#{window_name}",
+    ],
     ["select-window", "-t", "$4:1"],
   ]);
 });
@@ -425,7 +472,6 @@ test("closing the last project tab unlinks it and restores clean home", () => {
       "#{window_index}|#{window_id}|#{window_name}",
     ],
     ["unlink-window", "-t", "$4:1"],
-    ["set-option", "-t", "$4", "status", "off"],
     ["select-window", "-t", "$4:0"],
   ]);
 });

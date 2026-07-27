@@ -1,4 +1,4 @@
-import { fork } from "node:child_process";
+import { fork, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { appendFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
@@ -23,6 +23,7 @@ import {
   type ResponseData,
 } from "@pandamate/protocol";
 import {
+  configureControlStatusBar,
   controlTabForSession,
   discoverTmuxSessions,
   openSessionInNewITermWindow,
@@ -64,6 +65,38 @@ const brain = new PandamateBrain({
   cwd: resolve(import.meta.dirname, "../../.."),
   claudeExecutable: config.claudeExecutable,
 });
+
+const entryPath = import.meta.filename;
+
+function ownPane(): string | null {
+  const pane = process.env.TMUX_PANE ?? "";
+  return /^%\d+$/.test(pane) ? pane : null;
+}
+
+/**
+ * Keep the tmux key hints on screen for the session this TUI runs in — a
+ * FirstMate tab owns the whole window once it is selected, so the keys that
+ * lead back to Home cannot live inside the app — and clear the remain-on-exit
+ * guard a reload leaves behind now that this process is up.
+ */
+function dressOwnSession(): void {
+  try {
+    configureControlStatusBar(
+      tmux,
+      tmux.run(["display-message", "-p", "#{session_id}"]),
+    );
+    const pane = ownPane();
+    if (pane) {
+      tmux.run(["set-window-option", "-t", pane, "remain-on-exit", "off"]);
+    }
+  } catch (error) {
+    logControl(
+      "status.bar.failed",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+dressOwnSession();
 
 function eventSummary(event: EventRecord): EventSummary {
   const payload = event.payload;
@@ -246,6 +279,77 @@ function sendResult(result: TuiActionResult): void {
   }
 }
 
+async function pingDaemon(): Promise<boolean> {
+  const response = await requestDaemon(config.socketPath, {
+    protocol: protocolVersion,
+    requestId: `req_tui_${randomUUID()}`,
+    type: "system.ping",
+    payload: {},
+  }).catch(() => null);
+  return response?.ok === true;
+}
+
+async function waitForDaemon(expected: boolean): Promise<boolean> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if ((await pingDaemon()) === expected) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
+}
+
+/**
+ * A reload is only honest if the daemon runs the same code as the UI: it holds
+ * the tmux runtime and the supervisor, and it runs sources directly, so
+ * restarting it is how a change goes live. Running FirstMates survive — the
+ * daemon never kills tmux sessions on its way down.
+ */
+async function restartDaemon(): Promise<void> {
+  await requestDaemon(config.socketPath, {
+    protocol: protocolVersion,
+    requestId: `req_tui_${randomUUID()}`,
+    type: "system.shutdown",
+    payload: {},
+  }).catch(() => null);
+  if (!(await waitForDaemon(false))) {
+    throw new Error("The old Pandamate daemon did not stop; reload aborted.");
+  }
+  const daemonEntry = new URL(
+    "../../../apps/daemon/src/main.ts",
+    import.meta.url,
+  );
+  spawn(process.execPath, [daemonEntry.pathname], {
+    detached: true,
+    env: process.env,
+    stdio: "ignore",
+  }).unref();
+  if (!(await waitForDaemon(true))) {
+    throw new Error("The new Pandamate daemon did not answer; reload aborted.");
+  }
+}
+
+/**
+ * Restart the TUI in place by respawning the pane it lives in with the very
+ * command it was started with, so the reload works the same whether the pane
+ * came from the desktop launcher or was created by hand.
+ */
+function reloadOwnPane(): void {
+  const pane = ownPane();
+  if (!pane) {
+    throw new Error("Pandamate can only reload itself inside a tmux pane.");
+  }
+  // `#{pane_start_command}` comes back quoted and does not survive a round
+  // trip through respawn-pane, so the relaunch is spelled out as argv: same
+  // interpreter, same entry file, no shell in between.
+  logControl("reload.respawn", `${pane} ${process.execPath} ${entryPath}`);
+  // remain-on-exit keeps a relaunch that fails to boot visible as a dead pane
+  // instead of closing the window out from under the user; the fresh process
+  // turns it back off once it is up.
+  tmux.run(["set-window-option", "-t", pane, "remain-on-exit", "on"]);
+  tmux.run(["respawn-pane", "-k", "-t", pane, process.execPath, entryPath]);
+}
+
 let refreshInProgress = false;
 let eventCursor = events.at(-1)?.sequence ?? 0;
 let lastProjectionJson = JSON.stringify({ projects, services, events });
@@ -302,6 +406,29 @@ child.on("message", async (value: unknown) => {
     process.stderr.write(
       `${error instanceof Error ? error.message : "Invalid TUI action"}\n`,
     );
+    return;
+  }
+
+  if (request.action === "pandamate.reload") {
+    try {
+      await restartDaemon();
+      reloadOwnPane();
+      // respawn-pane kills this process; a result only arrives if it did not.
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        success: true,
+        message: "Pandamate is relaunching from the code on disk…",
+      });
+    } catch (error) {
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        success: false,
+        message:
+          error instanceof Error ? error.message : "Pandamate could not reload.",
+      });
+    }
     return;
   }
 

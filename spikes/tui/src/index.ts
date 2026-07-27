@@ -271,15 +271,15 @@ function header(model: DeckModel, mode: string) {
 function footer(screen: Screen, message: string | null) {
   const help =
     screen === "home"
-      ? "i write · s services · ↑↓/jk select · Enter project · e events · q quit"
+      ? "i write · s services · ↑↓/jk select · Enter project · e events · R reload · q quit"
       : screen === "input"
         ? "Enter send · ask anything or paste/drag a project folder · Esc cancel"
       : screen === "events"
-        ? "↑↓/jk scroll · Esc back home · q quit"
+        ? "↑↓/jk scroll · Esc back home · R reload · q quit"
       : screen === "services"
-        ? "Pandamate control plane · Esc back home · q quit"
+        ? "Pandamate control plane · Esc back home · R reload · q quit"
       : screen === "project"
-        ? "o open · g graceful · r reset · x kill · Esc back · q quit"
+        ? "o open · g graceful · r reset · x kill · Esc back · R reload · q quit"
         : screen === "confirm-graceful"
           ? "y confirm graceful shutdown · n/Esc cancel · q quit"
           : screen === "confirm-reset"
@@ -792,6 +792,27 @@ function requestAction(
   render();
 }
 
+/**
+ * Relaunch Pandamate itself from the code currently on disk: the host restarts
+ * the daemon and respawns this very tmux pane, so a change lands without
+ * quitting to a shell or relaunching the app from the desktop.
+ */
+function requestReload(): void {
+  if (!process.send) {
+    actionMessage =
+      "Control channel unavailable. Start with spike:tui:discovered.";
+    render();
+    return;
+  }
+  const request: TuiActionRequest = {
+    type: "action.request",
+    action: "pandamate.reload",
+  };
+  process.send(request);
+  actionMessage = "Reloading Pandamate from the code on disk…";
+  render();
+}
+
 function submitPandamateInput(): void {
   const text = pandamateInput.trim();
   if (!text) {
@@ -839,6 +860,11 @@ renderer.keyInput.on("keypress", (key) => {
       pandamateInput += key.sequence;
     }
     render();
+    return;
+  }
+
+  if (key.sequence === "R") {
+    requestReload();
     return;
   }
 
