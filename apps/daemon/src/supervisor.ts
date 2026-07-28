@@ -238,13 +238,16 @@ export class FirstMateSupervisor {
     const identity = profile.supervises
       ? `You are running as ${profile.name}, the main FirstMate for project "${project.title}" (${project.slug}).`
       : `You are running as a research partner (${profile.name}) for project "${project.title}" (${project.slug}).`;
+    const runtime = profile.supervises
+      ? `Your runtime is the Claude Code executable at ${this.#config.claudeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. FirstMate is this long-running main Claude Code process and role; it is not a second hidden executable.`
+      : `Your runtime is the Claude Code executable at ${this.#config.claudeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. You are this long-running main Claude Code process for the project — not a second hidden executable, and there is no crew, worktree, or pull-request machinery to run.`;
     const role = profile.supervises
       ? "Own this project's detailed work and durable project state. Read the repository instructions and existing project context before acting. Supervise any workers you create, keep their work isolated, report bounded status and checkpoints through the Pandamate integration when available, and remain available between assignments."
-      : "Begin by asking the captain focused clarifying questions about the research goal, scope, sources, and the desired deliverable before doing any work. Keep this a lightweight, conversational research session — you are a research partner, not a code-shipping FirstMate. Capture durable findings as written notes in the workspace.";
+      : "Begin by asking the captain focused clarifying questions about the research goal, scope, sources, and the desired deliverable before doing any work. Keep this a lightweight, conversational research session — you are a research partner, not a code-shipping FirstMate. Your product is documents — research notes, a filled wiki, written reports — not pull requests, and you neither dispatch workers nor open worktrees. Capture durable findings as written notes in the workspace.";
     const prompt = `FIRSTMATE_OP: v1
 ${identity}
 Your workspace and working directory are ${project.workspace}.
-Your runtime is the Claude Code executable at ${this.#config.claudeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. FirstMate is this long-running main Claude Code process and role; it is not a second hidden executable.
+${runtime}
 ${profile.instructions}
 ${role} Never operate on unrelated projects or pandamate:* control-plane sessions.`;
     return [

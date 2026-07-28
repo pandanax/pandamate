@@ -58,8 +58,17 @@ test("DocResearch launches as a light research partner, not a FirstMate", () => 
   // The heavy supervisor framing must not reach a research workspace.
   assert.doesNotMatch(prompt, /the main FirstMate/);
   assert.doesNotMatch(prompt, /Supervise any workers/);
+  // No crew/worktree/PR protocol: the runtime line drops the FirstMate role
+  // framing and the product is documents, not pull requests.
+  assert.doesNotMatch(
+    prompt,
+    /FirstMate is this long-running main Claude Code process and role/,
+  );
+  assert.match(prompt, /no crew, worktree, or pull-request machinery/);
+  assert.match(prompt, /not pull requests/);
   // Lifecycle framing is unchanged: identity header and the safety line stay.
   assert.match(prompt, /FIRSTMATE_OP: v1/);
+  assert.match(prompt, /long-running main Claude Code process/);
   assert.match(
     prompt,
     /Never operate on unrelated projects or pandamate:\* control-plane sessions\./,
@@ -71,6 +80,10 @@ test("Arc and Git keep the full FirstMate supervisor framing", () => {
     const prompt = launchPromptForKind(kind);
     assert.match(prompt, /the main FirstMate/);
     assert.match(prompt, /Supervise any workers you create/);
+    assert.match(
+      prompt,
+      /FirstMate is this long-running main Claude Code process and role/,
+    );
     assert.match(
       prompt,
       /Never operate on unrelated projects or pandamate:\* control-plane sessions\./,

@@ -260,7 +260,11 @@ changes must update this file and the affected specification.
   opens as "a research partner (DocResearch)" whose first act is to ask the
   captain focused clarifying questions about the research goal, scope, sources,
   and desired deliverable before doing any work, then runs a lightweight,
-  conversational session that captures durable findings as written notes.
+  conversational session that captures durable findings as written notes. Its
+  runtime line also drops the "FirstMate ... role" framing and states plainly
+  that there is no crew, worktree, or pull-request machinery to run — the product
+  is documents (research notes, a filled wiki, written reports), not pull
+  requests, and it neither dispatches workers nor opens worktrees.
 - **Reason:** A research workspace given the heavy supervisor framing was told
   to own durable work, dispatch workers, and report checkpoints, so the launched
   agent did not know what to do and reported confusion to the captain. The
