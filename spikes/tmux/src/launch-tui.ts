@@ -219,6 +219,10 @@ function buildTmuxProjection(
       project.tmuxSessionName ? [project.tmuxSessionName] : [],
     ),
   );
+  // The registered project slugs let discovery recognise a crew session by its
+  // `fm-<slug>-<task>` windows and fold it into that project instead of showing
+  // it as a separate nameless FirstMate.
+  const knownSlugs = new Set(durable.map((project) => project.slug));
   return {
     projects: [
       ...projectSummariesFromDaemon(durable, new Date(), sessions),
@@ -226,6 +230,7 @@ function buildTmuxProjection(
         sessions.filter(
           (session) => !durableSessionNames.has(session.name),
         ),
+        knownSlugs,
       ),
     ],
     services: serviceSummariesFromTmux(sessions),

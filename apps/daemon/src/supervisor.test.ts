@@ -148,6 +148,15 @@ class FakeTmux {
           )
           .join("\n");
       case "list-windows":
+        if (args[1] === "-a") {
+          return this.sessions
+            .flatMap((session) =>
+              session.windows.map(
+                (window) => `${session.id}|${window.name}`,
+              ),
+            )
+            .join("\n");
+        }
         return this.#byId(args[2] ?? "")
           .windows.map((window) => `${window.index}|${window.id}|${window.name}`)
           .join("\n");

@@ -90,6 +90,11 @@ class FakeTmuxServer implements CommandRunner {
     if (command === "display-message") {
       return "@0";
     }
+    if (command === "list-windows" && args[1] === "-a") {
+      return this.#sessions
+        .map((_name, index) => `$${index}|window`)
+        .join("\n");
+    }
     if (command === "list-windows") {
       return "0|@0|home";
     }
@@ -112,6 +117,7 @@ function discovered(names: readonly string[]): readonly DiscoveredTmuxSession[] 
     livePaneCount: 1,
     commands: ["node"],
     paths: [],
+    windowNames: [],
   }));
 }
 

@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   attachCommandForSessionId,
+  crewHostProjectSlug,
+  crewProjectSlug,
   deployWatcherWindow,
   discoverTmuxSessions,
   closeControlTab,
@@ -170,9 +172,77 @@ test("renames a session through its stable id", () => {
   ]);
 });
 
+test("reads the parent project slug from a crew window name", () => {
+  const known = (slug: string): boolean =>
+    ["mandala", "monomarket"].includes(slug);
+  // The task suffix may itself contain hyphens; the slug is the registered
+  // prefix, so `fm-mandala-numerology-aspect` is mandala's crew window.
+  assert.equal(
+    crewProjectSlug("fm-mandala-numerology-aspect", known),
+    "mandala",
+  );
+  assert.equal(crewProjectSlug("fm-monomarket-cart", known), "monomarket");
+  // A bare `fm-<slug>` with no task, an unknown slug, and a non-crew window are
+  // all not crew windows.
+  assert.equal(crewProjectSlug("fm-mandala", known), null);
+  assert.equal(crewProjectSlug("fm-legal-thing", known), null);
+  assert.equal(crewProjectSlug("zsh", known), null);
+  assert.equal(crewProjectSlug("watch", known), null);
+});
+
+test("attributes a bare crew session to its parent project", () => {
+  const known = (slug: string): boolean => slug === "mandala";
+  // The offending `firstmate` session: a shell window plus one mandala crew
+  // window belongs to mandala, not to itself.
+  assert.equal(
+    crewHostProjectSlug(
+      { name: "firstmate", windowNames: ["zsh", "fm-mandala-numerology-aspect"] },
+      known,
+    ),
+    "mandala",
+  );
+  // A registered project's own FirstMate session is never a crew host.
+  assert.equal(
+    crewHostProjectSlug(
+      { name: "firstmate-mandala", windowNames: ["mandala", "watch"] },
+      known,
+    ),
+    null,
+  );
+  // A control-plane session is never a crew host.
+  assert.equal(
+    crewHostProjectSlug(
+      { name: "pandamate:home", windowNames: ["fm-mandala-x"] },
+      known,
+    ),
+    null,
+  );
+  // A session with no crew window is standalone.
+  assert.equal(
+    crewHostProjectSlug({ name: "scratch", windowNames: ["editor"] }, known),
+    null,
+  );
+});
+
+test("does not fold a session hosting two projects' crews into one", () => {
+  const known = (slug: string): boolean =>
+    ["mandala", "monomarket"].includes(slug);
+  assert.equal(
+    crewHostProjectSlug(
+      {
+        name: "firstmate",
+        windowNames: ["fm-mandala-a", "fm-monomarket-b"],
+      },
+      known,
+    ),
+    null,
+  );
+});
+
 test("discovers and aggregates sessions from bounded tmux formats", () => {
   const runner = new RecordingRunner([
     "$2|0|2|zeta\n$1|1|1|alpha",
+    "$2|zsh\n$2|fm-alpha-task\n$1|editor",
     "$2|0|zsh|/workspace/zeta\n$2|1|node|/workspace/zeta\n$1|0|node|/workspace/alpha",
   ]);
   const tmux = new TmuxClient({ runner });
@@ -186,6 +256,7 @@ test("discovers and aggregates sessions from bounded tmux formats", () => {
       livePaneCount: 1,
       commands: ["node"],
       paths: ["/workspace/alpha"],
+      windowNames: ["editor"],
     },
     {
       id: "$2",
@@ -195,6 +266,7 @@ test("discovers and aggregates sessions from bounded tmux formats", () => {
       livePaneCount: 1,
       commands: ["node", "zsh"],
       paths: ["/workspace/zeta"],
+      windowNames: ["fm-alpha-task", "zsh"],
     },
   ]);
 });
@@ -202,6 +274,7 @@ test("discovers and aggregates sessions from bounded tmux formats", () => {
 test("asks tmux for printable formats only, never control characters", () => {
   const runner = new RecordingRunner([
     "$1|0|1|alpha",
+    "$1|alpha",
     "$1|0|node|/workspace/alpha",
     "$1|alpha",
     "/dev/ttys004|$1:@2.%3|alpha",
@@ -223,6 +296,7 @@ test("asks tmux for printable formats only, never control characters", () => {
 test("keeps free-form fields that contain the field delimiter", () => {
   const runner = new RecordingRunner([
     "$3|0|1|weird|name",
+    "$3|weird|window",
     "$3|0|node|/workspace/weird|dir",
     "$3|weird|name",
   ]);
@@ -237,6 +311,7 @@ test("keeps free-form fields that contain the field delimiter", () => {
       livePaneCount: 1,
       commands: ["node"],
       paths: ["/workspace/weird|dir"],
+      windowNames: ["weird|window"],
     },
   ]);
   assert.equal(tmux.resolveSession("weird|name"), "$3");
@@ -261,11 +336,12 @@ test("reads a server with no sessions left as an empty fleet", () => {
 test("rejects malformed discovery evidence", () => {
   const unknownPane = new RecordingRunner([
     "$1|0|1|alpha",
+    "$1|zsh",
     "$2|0|node|/workspace",
   ]);
   assert.throws(
     () => discoverTmuxSessions(new TmuxClient({ runner: unknownPane })),
-    /unknown tmux session/,
+    /Pane references unknown tmux session/,
   );
 });
 

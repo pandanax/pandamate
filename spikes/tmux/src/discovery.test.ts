@@ -27,6 +27,7 @@ test("discovered live sessions are running, not falsely working", () => {
         livePaneCount: 8,
         commands: ["2.1.159", "zsh"],
         paths: ["/workspace"],
+        windowNames: ["zsh"],
       },
       {
         id: "$2",
@@ -36,6 +37,7 @@ test("discovered live sessions are running, not falsely working", () => {
         livePaneCount: 1,
         commands: ["node"],
         paths: ["/pandamate"],
+        windowNames: ["home"],
       },
     ]),
     [
@@ -54,6 +56,73 @@ test("discovered live sessions are running, not falsely working", () => {
   );
 });
 
+test("a bare firstmate crew session is folded into its parent project", () => {
+  // The session named `firstmate` hosts a mandala crewmate — window
+  // `fm-mandala-numerology-aspect` — so with mandala registered it belongs to
+  // mandala's row, not to itself as a separate nameless FirstMate.
+  assert.deepEqual(
+    projectSummariesFromTmux(
+      [
+        {
+          id: "$1",
+          name: "firstmate",
+          attachedClients: 0,
+          windowCount: 2,
+          livePaneCount: 2,
+          commands: ["claude", "zsh"],
+          paths: ["/Users/pandanax/dev/mandala"],
+          windowNames: ["fm-mandala-numerology-aspect", "zsh"],
+        },
+      ],
+      new Set(["mandala"]),
+    ),
+    [],
+  );
+});
+
+test("a crew session for an unregistered project stays its own item", () => {
+  // Nothing to fold it into: mandala is not registered, so the crew session is
+  // still surfaced rather than silently vanishing.
+  const summaries = projectSummariesFromTmux(
+    [
+      {
+        id: "$1",
+        name: "firstmate",
+        attachedClients: 0,
+        windowCount: 2,
+        livePaneCount: 2,
+        commands: ["claude", "zsh"],
+        paths: ["/Users/pandanax/dev/mandala"],
+        windowNames: ["fm-mandala-numerology-aspect", "zsh"],
+      },
+    ],
+    new Set(["pandamate", "monomarket"]),
+  );
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0]?.name, "firstmate");
+});
+
+test("a genuinely unrelated session is still its own Fleet item", () => {
+  const summaries = projectSummariesFromTmux(
+    [
+      {
+        id: "$1",
+        name: "scratch",
+        attachedClients: 1,
+        windowCount: 1,
+        livePaneCount: 1,
+        commands: ["vim"],
+        paths: ["/tmp"],
+        windowNames: ["editor"],
+      },
+    ],
+    new Set(["mandala"]),
+  );
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0]?.name, "scratch");
+  assert.equal(summaries[0]?.slug, null);
+});
+
 test("control-plane sessions are excluded from the project fleet", () => {
   assert.deepEqual(
     projectSummariesFromTmux([
@@ -65,6 +134,7 @@ test("control-plane sessions are excluded from the project fleet", () => {
         livePaneCount: 1,
         commands: ["node"],
         paths: ["/pandamate"],
+        windowNames: ["write"],
       },
     ]),
     [],
@@ -82,6 +152,7 @@ test("control-plane sessions are projected as Pandamate services", () => {
         livePaneCount: 1,
         commands: ["node"],
         paths: ["/pandamate"],
+        windowNames: ["write"],
       },
       {
         id: "$3",
@@ -91,6 +162,7 @@ test("control-plane sessions are projected as Pandamate services", () => {
         livePaneCount: 2,
         commands: ["node"],
         paths: ["/workspace/mandala"],
+        windowNames: ["mandala", "watch"],
       },
     ]),
     [
@@ -174,6 +246,7 @@ test("Fleet overlays existing FirstMate heartbeat and status evidence", () => {
           livePaneCount: 7,
           commands: ["claude"],
           paths: [workspace],
+          windowNames: ["mandala", "watch"],
         },
       ],
     );

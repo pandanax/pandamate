@@ -4,6 +4,7 @@ import type {
 } from "../../tui/src/model.ts";
 
 import {
+  crewHostProjectSlug,
   isPandamateControlSession,
   type DiscoveredTmuxSession,
 } from "@pandamate/runtime-tmux";
@@ -15,11 +16,23 @@ import { firstMateWorkspaceEvidence } from "@pandamate/firstmate-kit";
 
 export { discoverTmuxSessions } from "@pandamate/runtime-tmux";
 
+/**
+ * Turn discovered non-control tmux sessions into standalone Fleet items — but
+ * not the ones that only host another project's crew. A session whose windows
+ * are `fm-<slug>-<task>` of a registered project (the bare `firstmate` crew
+ * session is the canonical case) belongs to `<slug>`, not to itself, so it is
+ * folded into that project rather than shown as a separate nameless FirstMate.
+ * `knownSlugs` is the set of registered project slugs; with none passed, every
+ * non-control session is standalone exactly as before.
+ */
 export function projectSummariesFromTmux(
   sessions: readonly DiscoveredTmuxSession[],
+  knownSlugs: ReadonlySet<string> = new Set(),
 ): readonly ProjectSummary[] {
+  const isKnownSlug = (slug: string): boolean => knownSlugs.has(slug);
   return sessions
     .filter((session) => !isPandamateControlSession(session.name))
+    .filter((session) => crewHostProjectSlug(session, isKnownSlug) === null)
     .map((session) => {
     const commands =
       session.commands.length === 0 ? "no commands" : session.commands.join(", ");

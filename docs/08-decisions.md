@@ -344,6 +344,51 @@ changes must update this file and the affected specification.
   and does not carry this rule.
 - **Status:** accepted.
 
+### D-032 — A crew session renders as children under its project, not as itself
+
+- **Decision:** A discovered non-control tmux session that only hosts another
+  project's crew is folded into that project's Fleet row, and its hosted
+  crewmates are rendered as **indented child rows under that project**, instead
+  of appearing as a separate, nameless top-level Fleet item. A FirstMate names
+  its crew windows `fm-<slug>-<task>`; when every crew window of a discovered
+  session resolves to one registered project slug — and the session is not itself
+  a `firstmate-<slug>` project session — that session is the project's crew host.
+  Its crew windows are carried onto the owning project's summary as a bounded
+  `crew: { name; window }[]` (one crewmate per crew window, the task suffix as
+  the display name) and the Fleet draws them beneath the project as `└─ <task>`
+  children. The canonical case is the bare session literally named `firstmate`
+  whose window `fm-mandala-numerology-aspect` is a mandala crewmate: with mandala
+  registered it no longer shows up as a nameless FirstMate; instead mandala's own
+  row visibly hosts a child `└─ numerology-aspect`.
+- **How it is decided:** deterministically, from evidence already in tmux.
+  Discovery (`discoverTmuxSessions`) now also collects each session's window
+  names; `crewProjectSlug` reads the parent slug from one `fm-<slug>-<task>`
+  window (the task suffix is required, and the slug is the longest registered
+  prefix so hyphenated tasks like `numerology-aspect` still attribute to
+  `mandala`); `crewHostProjectSlug` attributes a whole session only when all its
+  crew windows agree on one registered slug, and `crewOfHostedSession` projects
+  those windows into the bounded crew list. No model turn and no new tmux
+  environment variable are involved — the naming convention the crew lifecycle
+  already uses is the whole signal.
+- **Why children, not hidden:** the crew session is real work, so folding it
+  away entirely would make a running crewmate vanish from the operator's view.
+  Drawing it as a child keeps the crewmate visible while attributing it to the
+  project that owns it, so the Fleet reads as "mandala, hosting
+  numerology-aspect" rather than "mandala" plus a mystery FirstMate. Children are
+  display-only rows at the model's current altitude — keyboard navigation still
+  selects project rows.
+- **Excluded on purpose:** a session hosting crewmates of two different
+  registered projects is ambiguous and stays its own Fleet item rather than
+  being folded into one of them. A crew session for a project that is not
+  registered is also left visible — there is no parent row to fold it into, and
+  hiding it would make live work vanish. A registered project's own
+  `firstmate-<slug>` session is never treated as a crew host; it is the
+  FirstMate itself, attributed by its session name.
+- **Scope:** the attribution and child rendering live in the discovered Fleet
+  projection (`spike:tui:discovered`) and the TUI. The daemon projection and CLI
+  `status` do not yet carry hosted crew; extending them is a separate decision.
+- **Status:** accepted.
+
 ## Proposed; validate in Phase 0
 
 ### D-012 — TypeScript core

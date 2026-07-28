@@ -226,7 +226,15 @@ tmux server and does not touch normal tmux sessions.
 
 `spike:tui:discovered` must run inside tmux. It validates and displays existing
 non-control tmux sessions in the Fleet. Sessions named `pandamate:*` are
-control-plane surfaces and stay out of the project Fleet.
+control-plane surfaces and stay out of the project Fleet. A discovered session
+that only hosts another project's crew — its windows are `fm-<slug>-<task>` of a
+registered project, the bare `firstmate` crew session being the canonical case —
+belongs to that project: instead of appearing as a separate nameless FirstMate,
+its crewmates are drawn as indented child rows under the owning project's Fleet
+row (mandala hosting `fm-mandala-numerology-aspect` renders as mandala with a
+child `└─ numerology-aspect`). An ambiguous session hosting two registered
+projects' crews, and a crew session for an unregistered project, stay standalone.
+Decision: [D-032](docs/08-decisions.md).
 
 In the discovered Fleet, `Enter` opens a Project view, `o` opens that tmux
 session in a new iTerm window while Pandamate stays visible, `x` opens an

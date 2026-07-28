@@ -106,6 +106,72 @@ export function isPandamateControlSession(sessionName: string): boolean {
   );
 }
 
+/**
+ * Crew windows a FirstMate opens are named `fm-<slug>-<task>`; the `<slug>` is
+ * the project the crewmate belongs to. `crewProjectSlug` returns that slug for
+ * one window name, or null when the name is not a crew window. It is the single
+ * place the crew naming convention is spelled out.
+ *
+ * The task suffix is required — a bare `fm-<slug>` is not a crew window — so a
+ * project slug is read as the longest valid slug prefix that leaves a non-empty
+ * task, which keeps `fm-mandala-numerology-aspect` attributed to `mandala` even
+ * though hyphens are legal in both slug and task.
+ */
+export function crewProjectSlug(
+  windowName: string,
+  isKnownSlug: (slug: string) => boolean,
+): string | null {
+  if (!windowName.startsWith("fm-")) {
+    return null;
+  }
+  const rest = windowName.slice("fm-".length);
+  for (let cut = rest.length - 1; cut > 0; cut -= 1) {
+    if (rest[cut] !== "-") {
+      continue;
+    }
+    const candidate = rest.slice(0, cut);
+    const task = rest.slice(cut + 1);
+    if (task.length > 0 && slugPattern.test(candidate) && isKnownSlug(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * The registered project a discovered non-control session belongs to as a crew
+ * host, or null when it is a standalone session. A crew host has at least one
+ * `fm-<slug>-<task>` window whose slug is a registered project, and every crew
+ * window it has resolves to that same project — a session hosting crewmates of
+ * two different projects is ambiguous and stays its own Fleet item rather than
+ * being silently folded into one of them. `firstmate-<slug>` project sessions
+ * are never crew hosts; they are the FirstMate itself and are attributed by
+ * their own session name upstream.
+ */
+export function crewHostProjectSlug(
+  session: Pick<DiscoveredTmuxSession, "name" | "windowNames">,
+  isKnownSlug: (slug: string) => boolean,
+): string | null {
+  if (isPandamateControlSession(session.name)) {
+    return null;
+  }
+  if (session.name.startsWith("firstmate-")) {
+    return null;
+  }
+  let attributed: string | null = null;
+  for (const windowName of session.windowNames) {
+    const slug = crewProjectSlug(windowName, isKnownSlug);
+    if (slug === null) {
+      continue;
+    }
+    if (attributed !== null && attributed !== slug) {
+      return null;
+    }
+    attributed = slug;
+  }
+  return attributed;
+}
+
 export function validateStablePaneId(target: string): string {
   if (!stablePaneIdPattern.test(target)) {
     throw new Error(`Invalid stable tmux pane id: ${target}`);
@@ -403,6 +469,12 @@ export interface DiscoveredTmuxSession {
   readonly livePaneCount: number;
   readonly commands: readonly string[];
   readonly paths: readonly string[];
+  /**
+   * The names of this session's windows, sorted. Crew windows a FirstMate opens
+   * are named `fm-<slug>-<task>`, so these are the evidence that attributes an
+   * otherwise nameless crew session to its parent project's Fleet row.
+   */
+  readonly windowNames: readonly string[];
 }
 
 interface MutableSession {
@@ -413,6 +485,7 @@ interface MutableSession {
   livePaneCount: number;
   commands: Set<string>;
   paths: Set<string>;
+  windowNames: Set<string>;
 }
 
 function parseNonNegativeInteger(value: string, label: string): number {
@@ -452,7 +525,34 @@ export function discoverTmuxSessions(
       livePaneCount: 0,
       commands: new Set<string>(),
       paths: new Set<string>(),
+      windowNames: new Set<string>(),
     });
+  }
+
+  // Window names are how a crew session names itself after its parent project:
+  // a FirstMate opens crew windows as `fm-<slug>-<task>`, so listing them is
+  // what lets a nameless `firstmate` crew session be attributed to `<slug>`
+  // instead of appearing as its own Fleet item. `-a` lists every server window.
+  const windowRows = tmux.run([
+    "list-windows",
+    "-a",
+    "-F",
+    `#{session_id}${fieldSeparator}#{window_name}`,
+  ]);
+  if (windowRows !== "") {
+    for (const row of windowRows.split("\n")) {
+      const [sessionId, windowName] = splitRow(row, 2) ?? [];
+      if (!sessionId || windowName === undefined) {
+        throw new Error(`Malformed tmux window row: ${row}`);
+      }
+      const session = sessions.get(sessionId);
+      if (!session) {
+        throw new Error(`Window references unknown tmux session: ${sessionId}`);
+      }
+      if (windowName !== "") {
+        session.windowNames.add(windowName);
+      }
+    }
   }
 
   const paneRows = tmux.run([
@@ -490,6 +590,7 @@ export function discoverTmuxSessions(
       livePaneCount: session.livePaneCount,
       commands: [...session.commands].sort(),
       paths: [...session.paths].sort(),
+      windowNames: [...session.windowNames].sort(),
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
