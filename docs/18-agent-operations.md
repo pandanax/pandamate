@@ -4,8 +4,10 @@ Common operating rules for any FirstMate the Pandamate control plane raises — 
 and arc alike. The two differ in mechanics, not in principle, so the shared rules
 live here, in the Pandamate repo (versioned and reviewed, not in a per-session
 memory store). **Per-VCS specifics live in each FirstMate's own home** — the arc
-FirstMate's `AGENTS.md`, the git FirstMate's own docs — not here. Referenced from
-[CLAUDE.md](../CLAUDE.md).
+FirstMate's `AGENTS.md`, the git FirstMate's own docs — not here. Which layer and
+which home owns each capability is indexed in
+[docs/19-firstmate-responsibilities.md](19-firstmate-responsibilities.md).
+Referenced from [CLAUDE.md](../CLAUDE.md).
 
 ## Code tasks are isolated — код → ветка → PR → main
 

@@ -288,6 +288,7 @@ docs                     product specification and evidence logs
 16. [FirstMate and gnhf topology](docs/16-firstmate-and-gnhf-topology.md)
 17. [Full shutdown](docs/17-full-shutdown.md)
 18. [Agent operating notes](docs/18-agent-operations.md)
+19. [FirstMate responsibilities](docs/19-firstmate-responsibilities.md)
 
 ## North-star invariant
 

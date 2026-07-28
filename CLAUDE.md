@@ -11,7 +11,9 @@ Common operating rules for every FirstMate — **code tasks are isolated: код
 the real daemon, and the standing firstmate/gnhf mandate — live in
 [docs/18-agent-operations.md](docs/18-agent-operations.md). That is the canonical,
 versioned home for the shared guidance (not the per-session memory store); per-VCS
-specifics live in each FirstMate's own home.
+specifics live in each FirstMate's own home, and
+[docs/19-firstmate-responsibilities.md](docs/19-firstmate-responsibilities.md)
+indexes which layer/home owns each capability.
 
 ## The projects Pandamate supervises
 
