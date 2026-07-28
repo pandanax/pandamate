@@ -23,6 +23,9 @@ changes off whatever branch happens to be checked out.
 
 ## Code work lands in an isolated workspace, on a branch, as a pull request
 
+**The rule, in one line: код → ветка → PR → main.** Code never goes straight to
+`main`; it lands there only by merging its pull request.
+
 Any FirstMate that changes code does it in its own isolated workspace — a fresh
 worktree on its own branch — and lands it as a **pull request**, never by editing
 the shared checkout in place. This is the default for the tasks that need it (real
