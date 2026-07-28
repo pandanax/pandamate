@@ -8,6 +8,7 @@ import {
 import {
   demoProjects,
   emptyProject,
+  fleetRows,
   formatElapsedTime,
   layoutForWidth,
   moveSelection,
@@ -103,18 +104,40 @@ function fleetPanel(model: DeckModel, onSelect: (index: number) => void) {
       minWidth: 28,
       padding: 1,
     },
-    ...model.projects.map((project, index) =>
-      Box(
+    // fleetRows nests each project's hosted crewmates as indented children right
+    // under it. A crew child shares its project's selection (its onMouseDown
+    // selects the project index) and is never independently selectable.
+    ...fleetRows(model.projects).map((row, rowIndex) => {
+      const selected = row.projectIndex === model.selectedIndex;
+      if (row.kind === "crew") {
+        return Box(
+          {
+            id: `fleet-row-${rowIndex}`,
+            height: 1,
+            flexDirection: "row",
+            backgroundColor: selected ? "#263139" : colors.panel,
+            onMouseDown: () => onSelect(row.projectIndex),
+          },
+          Text({ content: "    ", width: 4 }),
+          Text({
+            content: `${row.branch} ${row.crewmate.name}`,
+            fg: colors.muted,
+            flexGrow: 1,
+          }),
+          Text({ content: "crew", fg: colors.muted }),
+        );
+      }
+      const project = row.project;
+      return Box(
         {
-          id: `project-${index}`,
+          id: `fleet-row-${rowIndex}`,
           height: 1,
           flexDirection: "row",
-          backgroundColor:
-            index === model.selectedIndex ? "#263139" : colors.panel,
-          onMouseDown: () => onSelect(index),
+          backgroundColor: selected ? "#263139" : colors.panel,
+          onMouseDown: () => onSelect(row.projectIndex),
         },
         Text({
-          content: `${index === model.selectedIndex ? "›" : " "} ${stateGlyph(project.state, model.pulseOn, model.reducedMotion)} `,
+          content: `${selected ? "›" : " "} ${stateGlyph(project.state, model.pulseOn, model.reducedMotion)} `,
           fg: stateColor(project.state),
           width: 4,
         }),
@@ -135,8 +158,8 @@ function fleetPanel(model: DeckModel, onSelect: (index: number) => void) {
           content: project.state,
           fg: stateColor(project.state),
         }),
-      ),
-    ),
+      );
+    }),
   );
 }
 
@@ -175,6 +198,13 @@ function detailPanel(project: ProjectSummary) {
           : colors.softWhite,
     }),
     Text({ content: heartbeat, fg: colors.muted }),
+    Text({
+      content:
+        project.crew.length === 0
+          ? "hosts crew: none"
+          : `hosts crew: ${project.crew.map((crewmate) => crewmate.name).join(", ")}`,
+      fg: project.crew.length === 0 ? colors.muted : colors.softWhite,
+    }),
     Text({
       content: `last message: ${project.lastMessage ?? "not reported yet"}`,
       fg: project.lastMessage ? colors.softWhite : colors.muted,

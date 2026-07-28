@@ -140,6 +140,9 @@ test("control protocol validates live projection updates", () => {
         lastMessage: null,
         heartbeatSeconds: null,
         tmuxWindowCount: 1,
+        crew: [
+          { name: "typo-fix", window: "fm-docs-typo-fix" },
+        ],
       },
     ],
     services: [
@@ -161,6 +164,9 @@ test("control protocol validates live projection updates", () => {
   });
 
   assert.equal(update.projects[0]?.state, "starting");
+  assert.deepEqual(update.projects[0]?.crew, [
+    { name: "typo-fix", window: "fm-docs-typo-fix" },
+  ]);
   assert.equal(update.services[0]?.name, "pandamate:write");
   assert.equal(update.events[0]?.sequence, 7);
   assert.throws(() =>

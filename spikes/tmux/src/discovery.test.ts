@@ -11,6 +11,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  hostedCrewByProjectSlug,
   projectSummariesFromDaemon,
   projectSummariesFromTmux,
   serviceSummariesFromTmux,
@@ -51,6 +52,7 @@ test("discovered live sessions are running, not falsely working", () => {
         lastMessage: null,
         heartbeatSeconds: null,
         tmuxWindowCount: 8,
+        crew: [],
       },
     ],
   );
@@ -78,6 +80,125 @@ test("a bare firstmate crew session is folded into its parent project", () => {
     ),
     [],
   );
+});
+
+test("a folded crew session's crewmate is attributed to its project as a child", () => {
+  const sessions = [
+    {
+      id: "$1",
+      name: "firstmate",
+      attachedClients: 0,
+      windowCount: 2,
+      livePaneCount: 2,
+      commands: ["claude", "zsh"],
+      paths: ["/Users/pandanax/dev/mandala"],
+      windowNames: ["fm-mandala-numerology-aspect", "zsh"],
+    },
+  ];
+  const knownSlugs = new Set(["mandala"]);
+  // The crew session is dropped from the standalone Fleet …
+  assert.deepEqual(projectSummariesFromTmux(sessions, knownSlugs), []);
+  // … and its crewmate reappears keyed under mandala.
+  const hosted = hostedCrewByProjectSlug(sessions, knownSlugs);
+  assert.deepEqual(hosted.get("mandala"), [
+    { name: "numerology-aspect", window: "fm-mandala-numerology-aspect" },
+  ]);
+
+  // The project row carries that crewmate as a child, not as a top-level item.
+  const summaries = projectSummariesFromDaemon(
+    [
+      {
+        id: "prj_1",
+        slug: "mandala",
+        title: "Mandala",
+        kind: "git",
+        workspace: "/workspace/mandala",
+        desiredState: "running",
+        actualState: "running",
+        tmuxTarget: "$9",
+        tmuxSessionName: "firstmate-mandala",
+        currentSummary: "1 live pane",
+        attentionLevel: "none",
+        lastHeartbeatAt: "2026-07-26T00:00:00.000Z",
+        version: 3,
+        createdAt: "2026-07-25T00:00:00.000Z",
+        updatedAt: "2026-07-26T00:00:00.000Z",
+      },
+    ],
+    new Date("2026-07-26T00:00:05.000Z"),
+    [],
+    hosted,
+  );
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0]?.name, "Mandala");
+  assert.deepEqual(summaries[0]?.crew, [
+    { name: "numerology-aspect", window: "fm-mandala-numerology-aspect" },
+  ]);
+});
+
+test("an ambiguous two-project crew session hosts no children", () => {
+  const sessions = [
+    {
+      id: "$1",
+      name: "firstmate",
+      attachedClients: 0,
+      windowCount: 3,
+      livePaneCount: 3,
+      commands: ["claude"],
+      paths: ["/workspace"],
+      windowNames: ["fm-mandala-a", "fm-monomarket-b", "zsh"],
+    },
+  ];
+  const knownSlugs = new Set(["mandala", "monomarket"]);
+  // It stays its own standalone item …
+  const standalone = projectSummariesFromTmux(sessions, knownSlugs);
+  assert.equal(standalone.length, 1);
+  assert.equal(standalone[0]?.name, "firstmate");
+  assert.deepEqual(standalone[0]?.crew, []);
+  // … and folds no crewmate under either project.
+  const hosted = hostedCrewByProjectSlug(sessions, knownSlugs);
+  assert.equal(hosted.get("mandala"), undefined);
+  assert.equal(hosted.get("monomarket"), undefined);
+});
+
+test("a project's own firstmate session is never a crew host", () => {
+  // `firstmate-mandala` is the FirstMate itself; its windows are not crew
+  // windows, so it contributes no child crew even though mandala is registered.
+  const hosted = hostedCrewByProjectSlug(
+    [
+      {
+        id: "$1",
+        name: "firstmate-mandala",
+        attachedClients: 1,
+        windowCount: 2,
+        livePaneCount: 2,
+        commands: ["claude"],
+        paths: ["/workspace/mandala"],
+        windowNames: ["mandala", "watch"],
+      },
+    ],
+    new Set(["mandala"]),
+  );
+  assert.equal(hosted.size, 0);
+});
+
+test("a crew session for an unregistered project contributes no child crew", () => {
+  const hosted = hostedCrewByProjectSlug(
+    [
+      {
+        id: "$1",
+        name: "firstmate",
+        attachedClients: 0,
+        windowCount: 2,
+        livePaneCount: 2,
+        commands: ["claude", "zsh"],
+        paths: ["/Users/pandanax/dev/mandala"],
+        windowNames: ["fm-mandala-numerology-aspect", "zsh"],
+      },
+    ],
+    new Set(["pandamate", "monomarket"]),
+  );
+  assert.equal(hosted.size, 0);
 });
 
 test("a crew session for an unregistered project stays its own item", () => {

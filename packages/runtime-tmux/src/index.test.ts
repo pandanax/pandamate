@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   attachCommandForSessionId,
   crewHostProjectSlug,
+  crewOfHostedSession,
   crewProjectSlug,
   deployWatcherWindow,
   discoverTmuxSessions,
@@ -236,6 +237,39 @@ test("does not fold a session hosting two projects' crews into one", () => {
       known,
     ),
     null,
+  );
+});
+
+test("projects a crew host's windows into named crewmate children", () => {
+  const known = (slug: string): boolean => slug === "mandala";
+  // Two mandala crew windows and a shell: the crew windows become children
+  // named by their task suffix, sorted by window, the shell is ignored.
+  assert.deepEqual(
+    crewOfHostedSession(
+      {
+        name: "firstmate",
+        windowNames: [
+          "zsh",
+          "fm-mandala-numerology-aspect",
+          "fm-mandala-auth-fix",
+        ],
+      },
+      "mandala",
+      known,
+    ),
+    [
+      { name: "auth-fix", window: "fm-mandala-auth-fix" },
+      { name: "numerology-aspect", window: "fm-mandala-numerology-aspect" },
+    ],
+  );
+  // Windows of another project are not this project's crew.
+  assert.deepEqual(
+    crewOfHostedSession(
+      { name: "firstmate", windowNames: ["fm-monomarket-cart"] },
+      "mandala",
+      (slug) => ["mandala", "monomarket"].includes(slug),
+    ),
+    [],
   );
 });
 

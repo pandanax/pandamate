@@ -172,6 +172,49 @@ export function crewHostProjectSlug(
   return attributed;
 }
 
+/**
+ * One hosted crewmate on a project's crew host: the crew window it runs in and
+ * the task suffix that names it. Bounded to a crew window each, deterministic.
+ */
+export interface HostedCrewmate {
+  readonly name: string;
+  readonly window: string;
+}
+
+/**
+ * The crewmates a discovered session hosts for one registered project, so the
+ * Fleet can render them as child rows under that project instead of dropping
+ * the session entirely. Returns the `fm-<slug>-<task>` windows of `session`
+ * that resolve to `slug` — the task suffix is the crewmate's display name —
+ * sorted and deduplicated by window name. Empty when `session` is not that
+ * project's crew host, so a caller can gate on `crewHostProjectSlug` first and
+ * trust this to describe exactly what was folded in.
+ */
+export function crewOfHostedSession(
+  session: Pick<DiscoveredTmuxSession, "name" | "windowNames">,
+  slug: string,
+  isKnownSlug: (slug: string) => boolean,
+): readonly HostedCrewmate[] {
+  const crew: HostedCrewmate[] = [];
+  const seen = new Set<string>();
+  for (const windowName of session.windowNames) {
+    if (crewProjectSlug(windowName, isKnownSlug) !== slug) {
+      continue;
+    }
+    if (seen.has(windowName)) {
+      continue;
+    }
+    seen.add(windowName);
+    // The task suffix is everything past `fm-<slug>-`; crewProjectSlug already
+    // proved this window resolves to `slug`, so the prefix is exactly that.
+    crew.push({
+      name: windowName.slice(`fm-${slug}-`.length),
+      window: windowName,
+    });
+  }
+  return crew.sort((left, right) => left.window.localeCompare(right.window));
+}
+
 export function validateStablePaneId(target: string): string {
   if (!stablePaneIdPattern.test(target)) {
     throw new Error(`Invalid stable tmux pane id: ${target}`);

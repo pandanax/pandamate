@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  fleetRows,
   formatElapsedTime,
   isProjectSlug,
   layoutForWidth,
@@ -10,7 +11,26 @@ import {
   parseInjectedProjects,
   parseInjectedServices,
   stateGlyph,
+  type ProjectSummary,
 } from "./model.ts";
+
+function projectSummary(
+  overrides: Partial<ProjectSummary> = {},
+): ProjectSummary {
+  return {
+    name: "Project",
+    slug: "project",
+    profile: "FirstMateGit",
+    sessionName: "firstmate-project",
+    state: "running",
+    summary: "",
+    lastMessage: null,
+    heartbeatSeconds: null,
+    tmuxWindowCount: null,
+    crew: [],
+    ...overrides,
+  };
+}
 
 test("layout breakpoints match the specification", () => {
   assert.equal(layoutForWidth(79), "compact");
@@ -39,6 +59,49 @@ test("reduced motion keeps the working glyph stable", () => {
   );
 });
 
+test("hosted crewmates render as indented children under their project", () => {
+  const rows = fleetRows([
+    projectSummary({
+      name: "Mandala",
+      slug: "mandala",
+      crew: [
+        { name: "auth-fix", window: "fm-mandala-auth-fix" },
+        { name: "numerology-aspect", window: "fm-mandala-numerology-aspect" },
+      ],
+    }),
+    projectSummary({ name: "Legal", slug: "legal" }),
+  ]);
+  // Mandala's project row, its two crew children in order, then Legal's row.
+  assert.deepEqual(
+    rows.map((row) =>
+      row.kind === "project"
+        ? `project ${row.project.name}`
+        : `${row.branch} ${row.crewmate.name}`,
+    ),
+    [
+      "project Mandala",
+      "├─ auth-fix",
+      "└─ numerology-aspect",
+      "project Legal",
+    ],
+  );
+  // The crew children stay attributed to mandala (projectIndex 0), never a
+  // top-level item, and never carry Legal's index.
+  assert.deepEqual(
+    rows.map((row) => row.projectIndex),
+    [0, 0, 0, 1],
+  );
+  // Exactly the two projects are selectable; the crewmates are display-only.
+  assert.equal(rows.filter((row) => row.kind === "project").length, 2);
+  assert.equal(rows.filter((row) => row.kind === "crew").length, 2);
+});
+
+test("a project without hosted crew renders as a single row", () => {
+  const rows = fleetRows([projectSummary({ name: "Solo" })]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.kind, "project");
+});
+
 test("injected project JSON is validated before use", () => {
   assert.deepEqual(
     parseInjectedProjects(
@@ -53,6 +116,7 @@ test("injected project JSON is validated before use", () => {
           lastMessage: null,
           heartbeatSeconds: null,
           tmuxWindowCount: 8,
+          crew: [],
         },
       ]),
     ),
@@ -67,10 +131,75 @@ test("injected project JSON is validated before use", () => {
         lastMessage: null,
         heartbeatSeconds: null,
         tmuxWindowCount: 8,
+        crew: [],
       },
     ],
   );
   assert.throws(() => parseInjectedProjects('{"name":"unchecked"}'));
+});
+
+test("a project carries the crewmates it hosts as validated children", () => {
+  const projects = parseInjectedProjects(
+    JSON.stringify([
+      {
+        name: "Mandala",
+        slug: "mandala",
+        profile: "FirstMateGit",
+        sessionName: "firstmate-mandala",
+        state: "working",
+        summary: "Hosting a crewmate",
+        lastMessage: null,
+        heartbeatSeconds: 3,
+        tmuxWindowCount: 4,
+        crew: [
+          {
+            name: "numerology-aspect",
+            window: "fm-mandala-numerology-aspect",
+          },
+        ],
+      },
+    ]),
+  );
+  assert.deepEqual(projects[0]?.crew, [
+    { name: "numerology-aspect", window: "fm-mandala-numerology-aspect" },
+  ]);
+  // A crew window must be an `fm-` window, and crew must be an array.
+  assert.throws(() =>
+    parseInjectedProjects(
+      JSON.stringify([
+        {
+          name: "Mandala",
+          slug: "mandala",
+          profile: "FirstMateGit",
+          sessionName: "firstmate-mandala",
+          state: "working",
+          summary: "",
+          lastMessage: null,
+          heartbeatSeconds: null,
+          tmuxWindowCount: null,
+          crew: [{ name: "x", window: "not-a-crew-window" }],
+        },
+      ]),
+    ),
+  );
+  assert.throws(() =>
+    parseInjectedProjects(
+      JSON.stringify([
+        {
+          name: "Mandala",
+          slug: "mandala",
+          profile: "FirstMateGit",
+          sessionName: null,
+          state: "stopped",
+          summary: "",
+          lastMessage: null,
+          heartbeatSeconds: null,
+          tmuxWindowCount: null,
+          crew: "nope",
+        },
+      ]),
+    ),
+  );
 });
 
 test("a Fleet item carries the durable slug it can be started again by", () => {
@@ -86,6 +215,7 @@ test("a Fleet item carries the durable slug it can be started again by", () => {
         lastMessage: null,
         heartbeatSeconds: null,
         tmuxWindowCount: null,
+        crew: [],
       },
     ]),
   );
@@ -107,6 +237,7 @@ test("a Fleet item carries the durable slug it can be started again by", () => {
           lastMessage: null,
           heartbeatSeconds: null,
           tmuxWindowCount: null,
+          crew: [],
         },
       ]),
     ),

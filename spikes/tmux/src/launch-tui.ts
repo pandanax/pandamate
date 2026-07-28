@@ -46,6 +46,7 @@ import type {
   ServiceSummary,
 } from "../../tui/src/model.ts";
 import {
+  hostedCrewByProjectSlug,
   projectSummariesFromDaemon,
   projectSummariesFromTmux,
   serviceSummariesFromTmux,
@@ -221,11 +222,13 @@ function buildTmuxProjection(
   );
   // The registered project slugs let discovery recognise a crew session by its
   // `fm-<slug>-<task>` windows and fold it into that project instead of showing
-  // it as a separate nameless FirstMate.
+  // it as a separate nameless FirstMate. The same evidence names the crewmates
+  // it hosts, which become that project's child rows.
   const knownSlugs = new Set(durable.map((project) => project.slug));
+  const hostedCrew = hostedCrewByProjectSlug(sessions, knownSlugs);
   return {
     projects: [
-      ...projectSummariesFromDaemon(durable, new Date(), sessions),
+      ...projectSummariesFromDaemon(durable, new Date(), sessions, hostedCrew),
       ...projectSummariesFromTmux(
         sessions.filter(
           (session) => !durableSessionNames.has(session.name),

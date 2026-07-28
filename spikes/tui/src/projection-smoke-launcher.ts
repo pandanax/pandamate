@@ -25,6 +25,7 @@ const timer = setTimeout(() => {
         lastMessage: null,
         heartbeatSeconds: null,
         tmuxWindowCount: 1,
+        crew: [],
       },
     ],
     services: [
