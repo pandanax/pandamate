@@ -4,6 +4,15 @@ Pandamate is the control plane for long-running FirstMate orchestrators. Start
 from [README.md](README.md) for product state and the current handoff;
 [docs/](docs/) holds the design record.
 
+## How to operate here (read before acting)
+
+Durable rules for working on this repo and its supervised projects —
+**isolate every task in its own worktree**, land useful work straight to `main`,
+the working tree is shared by parallel sessions, how to reach/restart the real
+daemon, and the standing firstmate/gnhf mandate — live in
+[docs/18-agent-operations.md](docs/18-agent-operations.md). This is the canonical,
+versioned home for that guidance (it is not kept in the per-session memory store).
+
 ## The projects Pandamate supervises
 
 firstmate and gnhf each exist **twice** — a git copy and an Arcadia copy — and

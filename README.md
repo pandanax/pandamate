@@ -285,6 +285,9 @@ docs                     product specification and evidence logs
 13. [Phase 2 progress](docs/13-phase-2-progress.md)
 14. [Completion audit](docs/14-completion-audit.md)
 15. [Phase 3 progress](docs/15-phase-3-progress.md)
+16. [FirstMate and gnhf topology](docs/16-firstmate-and-gnhf-topology.md)
+17. [Full shutdown](docs/17-full-shutdown.md)
+18. [Agent operating notes](docs/18-agent-operations.md)
 
 ## North-star invariant
 
