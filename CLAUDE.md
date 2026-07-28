@@ -6,12 +6,12 @@ from [README.md](README.md) for product state and the current handoff;
 
 ## How to operate here (read before acting)
 
-Durable rules for working on this repo and its supervised projects —
-**isolate every task in its own worktree**, land useful work straight to `main`,
-the working tree is shared by parallel sessions, how to reach/restart the real
-daemon, and the standing firstmate/gnhf mandate — live in
-[docs/18-agent-operations.md](docs/18-agent-operations.md). This is the canonical,
-versioned home for that guidance (it is not kept in the per-session memory store).
+Common operating rules for every FirstMate — **code tasks are isolated: код →
+ветка → PR → main**, don't clobber the shared working tree, how to reach/restart
+the real daemon, and the standing firstmate/gnhf mandate — live in
+[docs/18-agent-operations.md](docs/18-agent-operations.md). That is the canonical,
+versioned home for the shared guidance (not the per-session memory store); per-VCS
+specifics live in each FirstMate's own home.
 
 ## The projects Pandamate supervises
 
