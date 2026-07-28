@@ -95,6 +95,39 @@ test("finds a declared Watcher and ignores the hook-armed shape", () => {
   }
 });
 
+test("falls back to a firstmate home when the workspace declares no Watcher", () => {
+  const workspace = mkdtempSync(join(tmpdir(), "pandamate-product-"));
+  const home = mkdtempSync(join(tmpdir(), "pandamate-fm-home-"));
+  try {
+    // Product code: nothing under the workspace, so a home fallback is needed.
+    assert.equal(workspaceWatcherCommand(workspace), null);
+    assert.equal(workspaceWatcherCommand(workspace, [home]), null);
+
+    // The arc FirstMate's own crew tooling keeps fm-watch under its home.
+    const crew = join(home, "bin");
+    mkdirSync(crew, { recursive: true });
+    const watcher = join(crew, "fm-watch");
+    writeFileSync(watcher, "#!/bin/sh\n");
+    chmodSync(watcher, 0o755);
+    assert.equal(workspaceWatcherCommand(workspace, [home]), watcher);
+    // A trailing slash on the home is tolerated the same way as on a workspace.
+    assert.equal(workspaceWatcherCommand(workspace, [`${home}/`]), watcher);
+    // Without the fallback the product workspace still resolves nothing.
+    assert.equal(workspaceWatcherCommand(workspace), null);
+
+    // A watcher the workspace itself declares always wins over the fallback, so
+    // a git project whose workspace is the repository is never affected.
+    mkdirSync(join(workspace, ".pandamate"), { recursive: true });
+    const declared = join(workspace, ".pandamate", "watch");
+    writeFileSync(declared, "#!/bin/sh\n");
+    chmodSync(declared, 0o755);
+    assert.equal(workspaceWatcherCommand(workspace, [home]), declared);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test("refuses a Watcher path tmux could not run unquoted", () => {
   const workspace = mkdtempSync(join(tmpdir(), "pandamate watcher "));
   try {

@@ -392,7 +392,15 @@ ${role} Never operate on unrelated projects or pandamate:* control-plane session
       return;
     }
     try {
-      const command = workspaceWatcherCommand(project.workspace);
+      // An arc FirstMate's workspace is product code with no watcher of its
+      // own; its watcher lives in the configured firstmate home. Git projects
+      // resolve from their own workspace and are given no fallback, so a git
+      // project without a watcher never inherits the arc one.
+      const fallbackRoots =
+        project.kind === "arc" && this.#config.firstMateHome
+          ? [this.#config.firstMateHome]
+          : [];
+      const command = workspaceWatcherCommand(project.workspace, fallbackRoots);
       if (!command) {
         return;
       }

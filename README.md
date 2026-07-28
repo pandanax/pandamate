@@ -98,7 +98,12 @@ Phase 1 has a working vertical slice:
   launch environment and in the session's tmux environment, so the Watcher and
   anything the FirstMate opens later agree on one session. Watchers armed by a
   FirstMate's own Stop hook and adopted sessions are left alone; see
-  [D-028](docs/08-decisions.md).
+  [D-028](docs/08-decisions.md). An arc FirstMate whose workspace is product
+  code carries no watcher of its own — its `fm-watch` lives in the arc
+  FirstMate's separate home — so for `arc` projects the supervisor also looks
+  under the configured `PANDAMATE_FIRSTMATE_HOME` when the workspace declares
+  none; git projects, which own their watcher, are unaffected
+  ([D-031](docs/08-decisions.md)).
 - `i` opens a real Pandamate writing surface. A folder path can be pasted or
   dragged there. Pandamate detects a configured FirstMate from project-local
   Claude settings and repository markers, or accepts an explicit

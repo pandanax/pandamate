@@ -16,6 +16,15 @@ export interface PandamateConfig {
   readonly tmuxSocketName: string | undefined;
   readonly firstMateAdapter: "claude-code" | "fake";
   readonly claudeExecutable: string;
+  /**
+   * The arc FirstMate's own home — the directory holding its crew tooling and
+   * `bin/fm-watch`, e.g. `~/arcadia/junk/pandanax/firstmate`. An arc FirstMate's
+   * workspace is product code that carries no watcher of its own, so the
+   * supervisor falls back to this home to find one. `undefined` keeps the
+   * workspace-relative search as the only source, which is correct for git
+   * projects whose workspace already is the repository with the watcher.
+   */
+  readonly firstMateHome: string | undefined;
   readonly fakeFirstMateEntry: string | undefined;
   readonly reconcileIntervalMs: number;
   readonly heartbeatStaleMs: number;
@@ -74,6 +83,15 @@ export function loadConfig(
     join(homedir(), ".local", "bin", "claude"),
     "PANDAMATE_CLAUDE_EXECUTABLE",
   );
+  const firstMateHomeValue = environment.PANDAMATE_FIRSTMATE_HOME;
+  const firstMateHome =
+    firstMateHomeValue === undefined
+      ? undefined
+      : configuredPath(
+          firstMateHomeValue,
+          firstMateHomeValue,
+          "PANDAMATE_FIRSTMATE_HOME",
+        );
   const fakeFirstMateEntry = environment.PANDAMATE_FAKE_FIRSTMATE_ENTRY;
   if (
     fakeFirstMateEntry !== undefined &&
@@ -120,6 +138,7 @@ export function loadConfig(
     tmuxSocketName,
     firstMateAdapter,
     claudeExecutable,
+    firstMateHome,
     fakeFirstMateEntry,
     reconcileIntervalMs: boundedMilliseconds(
       "PANDAMATE_RECONCILE_INTERVAL_MS",

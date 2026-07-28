@@ -297,6 +297,19 @@ function watcherWorkspace(directory: string): string {
   return workspace;
 }
 
+/**
+ * A separate firstmate home holding the crew tooling's own `bin/fm-watch`, the
+ * way an arc FirstMate keeps it entirely outside its product-code workspace.
+ */
+function firstMateHomeWithWatcher(directory: string): string {
+  const home = join(directory, "firstmate-home");
+  mkdirSync(join(home, "bin"), { recursive: true });
+  const watcher = join(home, "bin", "fm-watch");
+  writeFileSync(watcher, "#!/bin/sh\nsleep 300\n");
+  chmodSync(watcher, 0o755);
+  return home;
+}
+
 test("deploys the Watcher beside a launched FirstMate and puts it back when it dies", () => {
   const directory = mkdtempSync(join(tmpdir(), "pandamate-watcher-"));
   try {
@@ -350,6 +363,66 @@ test("deploys the Watcher beside a launched FirstMate and puts it back when it d
     assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
       "firstmate-fixture",
       "watch",
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("deploys an arc FirstMate's Watcher from its firstmate home when the workspace is product code", () => {
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-arc-watcher-"));
+  try {
+    // Product code with no watcher of its own, like monomarket.
+    const workspace = join(directory, "product");
+    mkdirSync(workspace, { recursive: true });
+    const home = firstMateHomeWithWatcher(directory);
+    const tmux = new FakeTmux();
+    tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
+    const store = new FakeStore([
+      { ...fixtureProject(workspace), kind: "arc" as const },
+    ]);
+    const config = loadConfig({
+      PANDAMATE_STATE_DIR: join(directory, "state"),
+      PANDAMATE_RUNTIME_DIR: join(directory, "runtime"),
+      PANDAMATE_CLAUDE_EXECUTABLE: join(directory, "claude"),
+      PANDAMATE_FIRSTMATE_HOME: home,
+    });
+    const supervisor = new FirstMateSupervisor({ config, store, tmux });
+
+    supervisor.reconcileNow();
+    assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
+      "firstmate-fixture",
+      "watch",
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("does not lend the arc firstmate home to a git project without its own Watcher", () => {
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-git-no-watcher-"));
+  try {
+    const workspace = join(directory, "repo");
+    mkdirSync(workspace, { recursive: true });
+    const home = firstMateHomeWithWatcher(directory);
+    const tmux = new FakeTmux();
+    tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
+    const store = new FakeStore([
+      { ...fixtureProject(workspace), kind: "git" as const },
+    ]);
+    const config = loadConfig({
+      PANDAMATE_STATE_DIR: join(directory, "state"),
+      PANDAMATE_RUNTIME_DIR: join(directory, "runtime"),
+      PANDAMATE_CLAUDE_EXECUTABLE: join(directory, "claude"),
+      PANDAMATE_FIRSTMATE_HOME: home,
+    });
+    const supervisor = new FirstMateSupervisor({ config, store, tmux });
+
+    supervisor.reconcileNow();
+    // A git project resolves its watcher only from its own workspace, so the
+    // arc home never leaks into it.
+    assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
+      "firstmate-fixture",
     ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });

@@ -23,12 +23,31 @@ test("derives bounded state and runtime files from overrides", () => {
       tmuxSocketName: undefined,
       firstMateAdapter: "claude-code",
       claudeExecutable: "/Users/pandanax/.local/bin/claude",
+      firstMateHome: undefined,
       fakeFirstMateEntry: undefined,
       reconcileIntervalMs: 500,
       heartbeatStaleMs: 5000,
       shutdownGraceMs: 300_000,
       watcherRestartBackoffMs: 10_000,
     },
+  );
+});
+
+test("accepts an absolute firstmate home and rejects a relative one", () => {
+  assert.equal(
+    loadConfig({
+      PANDAMATE_STATE_DIR: "/private/tmp/state",
+      PANDAMATE_RUNTIME_DIR: "/private/tmp/runtime",
+      PANDAMATE_FIRSTMATE_HOME: "/private/tmp/arcadia/junk/pandanax/firstmate",
+    }).firstMateHome,
+    "/private/tmp/arcadia/junk/pandanax/firstmate",
+  );
+  assert.throws(() =>
+    loadConfig({
+      PANDAMATE_STATE_DIR: "/private/tmp/state",
+      PANDAMATE_RUNTIME_DIR: "/private/tmp/runtime",
+      PANDAMATE_FIRSTMATE_HOME: "relative/firstmate",
+    }),
   );
 });
 

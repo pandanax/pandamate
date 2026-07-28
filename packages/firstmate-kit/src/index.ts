@@ -56,22 +56,15 @@ function canonicalWorkspacePath(workspace: string): string {
   return workspace.length > 1 ? workspace.replaceAll(/\/+$/g, "") : workspace;
 }
 
-/**
- * The Watcher command Pandamate should deploy for a workspace, or null when the
- * project has none. Bounded, deterministic filesystem evidence only: an
- * executable regular file at a known path. The result is handed to tmux, which
- * runs it through a shell, so a path that could not survive that unquoted is
- * rejected here rather than deployed.
- */
-export function workspaceWatcherCommand(workspace: string): string | null {
-  const canonicalWorkspace = canonicalWorkspacePath(workspace);
+function watcherCommandUnder(root: string): string | null {
+  const canonicalRoot = canonicalWorkspacePath(root);
   for (const candidate of watcherCandidates) {
-    const path = join(canonicalWorkspace, candidate);
+    const path = join(canonicalRoot, candidate);
     let stat;
     try {
       stat = statSync(path);
     } catch {
-      // A project without this watcher is the ordinary case.
+      // A root without this watcher is the ordinary case.
       continue;
     }
     if (!stat.isFile() || (stat.mode & 0o111) === 0) {
@@ -81,6 +74,39 @@ export function workspaceWatcherCommand(workspace: string): string | null {
       throw new Error(`Watcher path is not safe to launch: ${path}`);
     }
     return path;
+  }
+  return null;
+}
+
+/**
+ * The Watcher command Pandamate should deploy for a workspace, or null when the
+ * project has none. Bounded, deterministic filesystem evidence only: an
+ * executable regular file at a known path. The result is handed to tmux, which
+ * runs it through a shell, so a path that could not survive that unquoted is
+ * rejected here rather than deployed.
+ *
+ * `fallbackRoots` are searched, in order, only when the workspace declares no
+ * watcher of its own. An arc FirstMate's workspace is product code that carries
+ * none, and its watcher lives in a separate firstmate home — the crew tooling's
+ * `firstmate/bin/fm-watch` (or `bin/fm-watch` when the home already is that
+ * `firstmate` directory) — so the supervisor passes that home here and such a
+ * project still resolves a Watcher. A git project whose workspace already is the
+ * repository with the watcher matches on the workspace and never reaches the
+ * fallback, so its behaviour is unchanged.
+ */
+export function workspaceWatcherCommand(
+  workspace: string,
+  fallbackRoots: readonly string[] = [],
+): string | null {
+  const fromWorkspace = watcherCommandUnder(workspace);
+  if (fromWorkspace) {
+    return fromWorkspace;
+  }
+  for (const root of fallbackRoots) {
+    const fromRoot = watcherCommandUnder(root);
+    if (fromRoot) {
+      return fromRoot;
+    }
   }
   return null;
 }
