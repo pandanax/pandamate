@@ -316,6 +316,31 @@ changes must update this file and the affected specification.
   set, which is what the crew tooling's `crew-retire` needs.
 - **Status:** accepted.
 
+### D-033 — A FirstMate does code work in an isolated workspace, on a branch, as a PR
+
+- **Decision:** Every supervising FirstMate's launch prompt (`supervisor.ts`,
+  the `supervises` role) now carries a standing rule: any task that changes code
+  runs in its own isolated workspace — a fresh worktree on its own branch that
+  lands as a pull request — never edited directly in the shared checkout, and the
+  FirstMate prefers dispatching a worker into that worktree over doing code work
+  in its own session. It holds across projects — arc (`arc pr create` → Arcanum)
+  and git (a GitHub PR) alike — and applies to the tasks that need it (real code
+  changes); trivial non-code landings (docs, memory pointers, ops notes) may still
+  go straight to `main` when the tree is not shared. See
+  [docs/18](18-agent-operations.md).
+- **Reason:** Panda's directive (2026-07-28): «все фестмэйты которые что-то делают
+  в коде должны создать ветку и пр всегда в изолированном воркспейсе». Un-isolated
+  code work piles onto whatever branch is checked out (the arc main mount is often
+  on someone else's product branch; the pandamate git tree is shared by parallel
+  sessions) and skips review. Putting the rule in the launch prompt makes it
+  universal to every FirstMate the control plane raises, deterministically, rather
+  than relying on each project's own docs.
+- **Scope:** the `supervises` profiles (FirstMateArc, FirstMateGit) only.
+  DocResearch is not a code-shipping FirstMate — its prompt keeps the light
+  research framing ([D-030](#d-030--docresearch-launches-as-a-light-research-partner-not-a-firstmate))
+  and does not carry this rule.
+- **Status:** accepted.
+
 ## Proposed; validate in Phase 0
 
 ### D-012 — TypeScript core
