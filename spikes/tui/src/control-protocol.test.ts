@@ -104,6 +104,67 @@ test("starting a stopped FirstMate travels by slug, not by session", () => {
   );
 });
 
+test("renaming a durable project travels by slug with a bounded name", () => {
+  // A typed label overrides the shown name…
+  assert.deepEqual(
+    parseTuiActionRequest({
+      type: "action.request",
+      action: "project.rename",
+      slug: "mandala",
+      name: "My Mandala",
+    }),
+    {
+      type: "action.request",
+      action: "project.rename",
+      slug: "mandala",
+      name: "My Mandala",
+    },
+  );
+  // …and an empty name is a deliberate clear, not an error.
+  assert.deepEqual(
+    parseTuiActionRequest({
+      type: "action.request",
+      action: "project.rename",
+      slug: "mandala",
+      name: "",
+    }),
+    {
+      type: "action.request",
+      action: "project.rename",
+      slug: "mandala",
+      name: "",
+    },
+  );
+  for (const invalid of [
+    { type: "action.request", action: "project.rename", name: "x" },
+    { type: "action.request", action: "project.rename", slug: "Mandala", name: "x" },
+    {
+      type: "action.request",
+      action: "project.rename",
+      slug: "mandala",
+      name: "x".repeat(81),
+    },
+  ]) {
+    assert.throws(() => parseTuiActionRequest(invalid));
+  }
+  assert.deepEqual(
+    parseTuiActionResult({
+      type: "action.result",
+      action: "project.rename",
+      slug: "mandala",
+      success: true,
+      message: 'Renamed mandala to "My Mandala".',
+    }),
+    {
+      type: "action.result",
+      action: "project.rename",
+      slug: "mandala",
+      success: true,
+      message: 'Renamed mandala to "My Mandala".',
+    },
+  );
+});
+
 test("control protocol accepts bounded Pandamate input", () => {
   assert.deepEqual(
     parseTuiActionRequest({

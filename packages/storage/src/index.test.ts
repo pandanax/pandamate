@@ -117,6 +117,55 @@ test("updates desired state and event atomically", () => {
   }
 });
 
+test("overrides and clears a project's custom display name idempotently", () => {
+  let id = 0;
+  const store = new PandamateStore(":memory:", {
+    now: () => new Date("2026-07-26T12:00:00.000Z"),
+    createId: (prefix) => `${prefix}_rename_${++id}`,
+  });
+  try {
+    const created = store.createProject(
+      {
+        slug: "mandala",
+        title: "Mandala",
+        kind: "git",
+        workspace: "/workspace/mandala",
+      },
+      "test:create:rename",
+    );
+    assert.equal(created.customDisplayName, null);
+
+    const renamed = store.renameProject(
+      "mandala",
+      "My Mandala",
+      "test:rename:set",
+    );
+    assert.equal(renamed.customDisplayName, "My Mandala");
+    assert.equal(renamed.version, 2);
+    assert.equal(store.getProject("mandala")?.customDisplayName, "My Mandala");
+    // The real identity survives the override.
+    assert.equal(store.getProject("mandala")?.title, "Mandala");
+    assert.equal(store.listEvents().at(-1)?.type, "project.renamed");
+
+    // Replaying the same idempotency key returns the same result without a
+    // second version bump or a duplicate event.
+    assert.deepEqual(
+      store.renameProject("mandala", "My Mandala", "test:rename:set"),
+      renamed,
+    );
+    assert.equal(store.getProject("mandala")?.version, 2);
+    assert.equal(store.listEvents().length, 2);
+
+    // An empty name clears the override back to the real title.
+    const cleared = store.renameProject("mandala", "", "test:rename:clear");
+    assert.equal(cleared.customDisplayName, null);
+    assert.equal(cleared.version, 3);
+    assert.equal(store.getProject("mandala")?.customDisplayName, null);
+  } finally {
+    store.close();
+  }
+});
+
 test("durably adopts one live tmux target per project", () => {
   let id = 0;
   const store = new PandamateStore(":memory:", {

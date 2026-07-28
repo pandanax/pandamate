@@ -9,6 +9,7 @@ import {
   validateRecordDecisionInput,
   validateIdempotencyKey,
   validateProjectSlug,
+  validateCustomDisplayName,
   type CreateProjectInput,
   type AdoptTmuxSessionInput,
   type EventRecord,
@@ -90,6 +91,16 @@ export type Request =
       readonly type: "project.restart";
       readonly idempotencyKey: string;
       readonly payload: { readonly slug: string };
+    }
+  | {
+      readonly protocol: 1;
+      readonly requestId: string;
+      readonly type: "project.rename";
+      readonly idempotencyKey: string;
+      readonly payload: {
+        readonly slug: string;
+        readonly customDisplayName: string | null;
+      };
     }
   | {
       readonly protocol: 1;
@@ -330,6 +341,17 @@ export function parseRequest(value: unknown): Request {
         type: input.type,
         idempotencyKey: validateIdempotencyKey(input.idempotencyKey),
         payload: { slug: validateProjectSlug(payload.slug) },
+      };
+    case "project.rename":
+      return {
+        protocol: protocolVersion,
+        requestId,
+        type: input.type,
+        idempotencyKey: validateIdempotencyKey(input.idempotencyKey),
+        payload: {
+          slug: validateProjectSlug(payload.slug),
+          customDisplayName: validateCustomDisplayName(payload.customDisplayName),
+        },
       };
     case "event.list": {
       const after = payload.after;

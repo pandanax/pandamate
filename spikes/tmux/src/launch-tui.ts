@@ -598,6 +598,56 @@ child.on("message", async (value: unknown) => {
   }
 
   /**
+   * Renaming overrides a durable project's display label without touching its
+   * real title; an empty name clears the override back to that title. Only
+   * registered projects carry a slug, so discovered sessions never reach here.
+   */
+  if (request.action === "project.rename") {
+    try {
+      const project = durableProjects.find(
+        (candidate) => candidate.slug === request.slug,
+      );
+      if (!project) {
+        throw new Error(`${request.slug} is not a registered Pandamate project.`);
+      }
+      const response = await requestDaemon(config.socketPath, {
+        protocol: protocolVersion,
+        requestId: `req_tui_${randomUUID()}`,
+        type: "project.rename",
+        idempotencyKey: `tui:${randomUUID()}`,
+        payload: { slug: project.slug, customDisplayName: request.name },
+      });
+      if (!response.ok) {
+        throw new Error(response.error.message);
+      }
+      await refreshProjection();
+      const cleared = request.name.trim().length === 0;
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        slug: project.slug,
+        success: true,
+        message: (cleared
+          ? `Cleared the custom name for ${project.slug}.`
+          : `Renamed ${project.slug} to "${request.name}".`
+        ).slice(0, 240),
+      });
+    } catch (error) {
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        slug: request.slug,
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : `Pandamate could not rename ${request.slug}.`,
+      });
+    }
+    return;
+  }
+
+  /**
    * Start a project whose runtime is gone and hand the user back the tab they
    * lost. There is no tmux session to address and no tab to reopen — the
    * FirstMate is deployed again from durable state, exactly the way it was

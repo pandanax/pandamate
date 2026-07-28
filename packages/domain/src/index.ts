@@ -36,6 +36,7 @@ export interface Project {
   readonly id: string;
   readonly slug: string;
   readonly title: string;
+  readonly customDisplayName: string | null;
   readonly kind: ProjectKind;
   readonly workspace: string;
   readonly desiredState: DesiredState;
@@ -432,6 +433,23 @@ export function validateProjectTitle(value: unknown): string {
     throw new Error("Project title must be 1-120 printable characters");
   }
   return value.trim();
+}
+
+export function validateCustomDisplayName(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== "string" || /[\u0000-\u001f\u007f]/.test(value)) {
+    throw new Error("Invalid custom display name");
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  if (trimmed.length > 80) {
+    throw new Error("Invalid custom display name");
+  }
+  return trimmed;
 }
 
 export function validateWorkspace(value: unknown): string {

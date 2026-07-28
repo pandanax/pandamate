@@ -200,6 +200,14 @@ function handleRequest(
           request.idempotencyKey,
         ),
       }));
+    case "project.rename":
+      return response(request.requestId, () => ({
+        project: store.renameProject(
+          request.payload.slug,
+          request.payload.customDisplayName,
+          request.idempotencyKey,
+        ),
+      }));
     case "event.list": {
       return response(request.requestId, () => {
         const events = store.listEvents(

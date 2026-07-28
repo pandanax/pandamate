@@ -132,7 +132,7 @@ export function projectSummariesFromDaemon(
         session.name === project.tmuxSessionName,
     );
     return {
-      name: project.title,
+      name: project.customDisplayName ?? project.title,
       slug: project.slug,
       profile: profileForProjectKind(project.kind),
       sessionName:

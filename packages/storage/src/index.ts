@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import {
   validateCreateProjectInput,
+  validateCustomDisplayName,
   validateCreateMessageInput,
   validateCreateTimerInput,
   validateCheckpointInput,
@@ -193,6 +194,12 @@ const migrations = [
       CREATE INDEX decisions_topic_created ON decisions(topic, created_at);
     `,
   },
+  {
+    version: 8,
+    sql: `
+      ALTER TABLE projects ADD COLUMN custom_display_name TEXT;
+    `,
+  },
 ] as const;
 
 function text(row: SqlRow, field: string): string {
@@ -227,6 +234,7 @@ function projectFromRow(row: SqlRow): Project {
     id: text(row, "id"),
     slug: text(row, "slug"),
     title: text(row, "title"),
+    customDisplayName: nullableText(row, "custom_display_name"),
     kind: text(row, "kind") as Project["kind"],
     workspace: text(row, "workspace"),
     desiredState: text(row, "desired_state") as Project["desiredState"],
@@ -439,6 +447,7 @@ export class PandamateStore {
       id: this.#createId("prj"),
       slug: input.slug,
       title: input.title,
+      customDisplayName: null,
       kind: input.kind,
       workspace: input.workspace,
       desiredState: "stopped",
@@ -469,15 +478,17 @@ export class PandamateStore {
       this.#database
         .prepare(
           `INSERT INTO projects(
-            id, slug, title, kind, workspace, desired_state, actual_state,
-            tmux_target, tmux_session_name, current_summary, attention_level,
-            last_heartbeat_at, version, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            id, slug, title, custom_display_name, kind, workspace,
+            desired_state, actual_state, tmux_target, tmux_session_name,
+            current_summary, attention_level, last_heartbeat_at, version,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           project.id,
           project.slug,
           project.title,
+          project.customDisplayName,
           project.kind,
           project.workspace,
           project.desiredState,
@@ -1018,6 +1029,101 @@ export class PandamateStore {
         .run(
           idempotencyKey,
           "project.restart",
+          JSON.stringify(updated),
+          timestamp,
+        );
+      this.#database.exec("COMMIT");
+      return updated;
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  renameProject(
+    rawSlug: string,
+    rawCustomName: unknown,
+    rawIdempotencyKey: string,
+  ): Project {
+    const slug = validateProjectSlug(rawSlug);
+    const customDisplayName = validateCustomDisplayName(rawCustomName);
+    const idempotencyKey = validateIdempotencyKey(rawIdempotencyKey);
+    const existing = this.#database
+      .prepare(
+        "SELECT response_json FROM command_results WHERE idempotency_key = ?",
+      )
+      .get(idempotencyKey) as SqlRow | undefined;
+    if (existing) {
+      return JSON.parse(text(existing, "response_json")) as Project;
+    }
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      const currentRow = this.#database
+        .prepare("SELECT * FROM projects WHERE slug = ?")
+        .get(slug) as SqlRow | undefined;
+      if (!currentRow) {
+        throw new Error(`Unknown project: ${slug}`);
+      }
+      const current = projectFromRow(currentRow);
+      const timestamp = this.#now().toISOString();
+      const updated: Project =
+        current.customDisplayName === customDisplayName
+          ? current
+          : {
+              ...current,
+              customDisplayName,
+              version: current.version + 1,
+              updatedAt: timestamp,
+            };
+
+      if (updated !== current) {
+        this.#database
+          .prepare(
+            `UPDATE projects
+             SET custom_display_name = ?, version = ?, updated_at = ?
+             WHERE id = ? AND version = ?`,
+          )
+          .run(
+            updated.customDisplayName,
+            updated.version,
+            updated.updatedAt,
+            updated.id,
+            current.version,
+          );
+        this.#database
+          .prepare(
+            `INSERT INTO events(
+              id, occurred_at, recorded_at, type, project_id, actor_kind,
+              actor_id, correlation_id, causation_id, schema_version, payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            this.#createId("evt"),
+            timestamp,
+            timestamp,
+            "project.renamed",
+            updated.id,
+            "cli",
+            "local-user",
+            idempotencyKey,
+            null,
+            1,
+            JSON.stringify({
+              slug,
+              from: current.customDisplayName,
+              to: updated.customDisplayName,
+            }),
+          );
+      }
+      this.#database
+        .prepare(
+          `INSERT INTO command_results(
+            idempotency_key, command_type, response_json, created_at
+          ) VALUES (?, ?, ?, ?)`,
+        )
+        .run(
+          idempotencyKey,
+          "project.rename",
           JSON.stringify(updated),
           timestamp,
         );

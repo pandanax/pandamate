@@ -111,6 +111,7 @@ test("a folded crew session's crewmate is attributed to its project as a child",
         id: "prj_1",
         slug: "mandala",
         title: "Mandala",
+        customDisplayName: null,
         kind: "git",
         workspace: "/workspace/mandala",
         desiredState: "running",
@@ -303,6 +304,7 @@ test("daemon projects remain in Fleet after their runtime stops", () => {
         id: "prj_1",
         slug: "mandala",
         title: "Mandala",
+        customDisplayName: null,
         kind: "git",
         workspace: "/workspace/mandala",
         desiredState: "stopped",
@@ -327,6 +329,39 @@ test("daemon projects remain in Fleet after their runtime stops", () => {
   assert.equal(summary[0]?.slug, "mandala");
 });
 
+test("Fleet shows a project's custom display name over its real title", () => {
+  const base = {
+    id: "prj_1",
+    slug: "mandala",
+    title: "Mandala",
+    kind: "git" as const,
+    workspace: "/workspace/mandala",
+    desiredState: "stopped" as const,
+    actualState: "stopped" as const,
+    tmuxTarget: null,
+    tmuxSessionName: null,
+    currentSummary: "Stopped",
+    attentionLevel: "none" as const,
+    lastHeartbeatAt: null,
+    version: 3,
+    createdAt: "2026-07-25T00:00:00.000Z",
+    updatedAt: "2026-07-26T00:00:00.000Z",
+  };
+  // A null override falls back to the real title.
+  const withTitle = projectSummariesFromDaemon(
+    [{ ...base, customDisplayName: null }],
+    new Date("2026-07-26T00:00:05.000Z"),
+  );
+  assert.equal(withTitle[0]?.name, "Mandala");
+  // A set override wins, without disturbing the slug identity.
+  const withOverride = projectSummariesFromDaemon(
+    [{ ...base, customDisplayName: "My Mandala" }],
+    new Date("2026-07-26T00:00:05.000Z"),
+  );
+  assert.equal(withOverride[0]?.name, "My Mandala");
+  assert.equal(withOverride[0]?.slug, "mandala");
+});
+
 test("Fleet overlays existing FirstMate heartbeat and status evidence", () => {
   const workspace = mkdtempSync(join(tmpdir(), "pandamate-fleet-evidence-"));
   try {
@@ -343,6 +378,7 @@ test("Fleet overlays existing FirstMate heartbeat and status evidence", () => {
           id: "prj_1",
           slug: "mandala",
           title: "Mandala",
+          customDisplayName: null,
           kind: "git",
           workspace,
           desiredState: "running",

@@ -14,12 +14,14 @@ export type TuiAction =
   | "session.reset"
   | "session.kill"
   | "project.start"
+  | "project.rename"
   | "pandamate.submit"
   | "pandamate.reload"
   | "pandamate.shutdown-all";
 export type SessionTuiAction = Exclude<
   TuiAction,
   | "project.start"
+  | "project.rename"
   | "pandamate.submit"
   | "pandamate.reload"
   | "pandamate.shutdown-all"
@@ -40,6 +42,16 @@ export type TuiActionRequest =
       readonly type: "action.request";
       readonly action: "project.start";
       readonly slug: string;
+    }
+  /**
+   * Renaming a durable project overrides its display label without touching its
+   * real title, so it too travels by slug — an empty name clears the override.
+   */
+  | {
+      readonly type: "action.request";
+      readonly action: "project.rename";
+      readonly slug: string;
+      readonly name: string;
     }
   | {
       readonly type: "action.request";
@@ -126,6 +138,7 @@ function isTuiAction(value: unknown): value is TuiAction {
     value === "session.reset" ||
     value === "session.kill" ||
     value === "project.start" ||
+    value === "project.rename" ||
     value === "pandamate.submit" ||
     value === "pandamate.reload" ||
     value === "pandamate.shutdown-all"
@@ -179,6 +192,20 @@ export function parseTuiActionRequest(value: unknown): TuiActionRequest {
       slug: candidate.slug,
     };
   }
+  if (candidate.action === "project.rename") {
+    if (!isProjectSlug(candidate.slug)) {
+      throw new Error("Invalid Pandamate project slug");
+    }
+    if (typeof candidate.name !== "string" || candidate.name.length > 80) {
+      throw new Error("Invalid Pandamate custom name");
+    }
+    return {
+      type: "action.request",
+      action: candidate.action,
+      slug: candidate.slug,
+      name: candidate.name,
+    };
+  }
   if (!isSafeSessionName(candidate.sessionName)) {
     throw new Error("Invalid TUI action request");
   }
@@ -199,7 +226,9 @@ export function parseTuiActionResult(value: unknown): TuiActionResult {
     !isTuiAction(candidate.action) ||
     (isSessionAction(candidate.action) &&
       !isSafeSessionName(candidate.sessionName)) ||
-    (candidate.action === "project.start" && !isProjectSlug(candidate.slug)) ||
+    ((candidate.action === "project.start" ||
+      candidate.action === "project.rename") &&
+      !isProjectSlug(candidate.slug)) ||
     typeof candidate.success !== "boolean" ||
     typeof candidate.message !== "string" ||
     candidate.message.length > 240

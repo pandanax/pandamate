@@ -33,6 +33,7 @@ import {
 type Screen =
   | "home"
   | "input"
+  | "rename"
   | "events"
   | "services"
   | "project"
@@ -326,6 +327,8 @@ function footer(
         ? "Pandamate is closing itself down…"
       : screen === "input"
         ? "Enter send · ask anything or paste/drag a project folder · Esc cancel"
+      : screen === "rename"
+        ? "Enter save · empty clears the custom name · Esc cancel"
       : screen === "events"
         ? "↑↓/jk scroll · Esc back home · R reload · q quit"
       : screen === "services"
@@ -334,8 +337,8 @@ function footer(
         ? // The footer promises only what this project can actually do now: a
           // stopped FirstMate has no session for open, graceful, reset, or kill.
           canStart(project)
-          ? "s start FirstMate · Esc back · R reload · q quit"
-          : "o open · g graceful · r reset · x kill · Esc back · R reload · q quit"
+          ? "s start FirstMate · n rename · Esc back · R reload · q quit"
+          : "o open · g graceful · r reset · x kill · n rename · Esc back · R reload · q quit"
         : screen === "confirm-graceful"
           ? "y confirm graceful shutdown · n/Esc cancel · q quit"
           : screen === "confirm-reset"
@@ -393,6 +396,45 @@ function pandamateInputPanel(value: string) {
     Box(
       {
         title: " INPUT ",
+        borderStyle: "rounded",
+        borderColor: colors.cyan,
+        height: 3,
+        paddingLeft: 1,
+        paddingRight: 1,
+      },
+      Text({
+        content: `› ${value}█`,
+        fg: colors.softWhite,
+      }),
+    ),
+  );
+}
+
+function renameInputPanel(project: ProjectSummary, value: string) {
+  return Box(
+    {
+      id: "rename-input",
+      title: " RENAME PROJECT ",
+      borderStyle: "double",
+      borderColor: colors.purple,
+      backgroundColor: colors.panel,
+      flexDirection: "column",
+      flexGrow: 1,
+      padding: 2,
+      gap: 2,
+    },
+    Text({
+      content: `Give ${project.slug ?? project.name} a custom display label for the Fleet:`,
+      fg: colors.softWhite,
+    }),
+    Text({
+      content:
+        "This overrides the shown name only — leave it empty to clear the override.",
+      fg: colors.cyan,
+    }),
+    Box(
+      {
+        title: " NAME ",
         borderStyle: "rounded",
         borderColor: colors.cyan,
         height: 3,
@@ -733,6 +775,7 @@ function buildDeck(
   selectedEventIndex: number,
   message: string | null,
   pandamateInput: string,
+  renameInput: string,
   shutdownProgress: TuiShutdownProgress | null,
   onSelect: (index: number) => void,
 ) {
@@ -771,6 +814,23 @@ function buildDeck(
       },
       header(model, "compose"),
       pandamateInputPanel(pandamateInput),
+      footer(screen, message, project),
+    );
+  }
+
+  if (screen === "rename") {
+    return Box(
+      {
+        id: "deck",
+        width: "100%",
+        height: "100%",
+        backgroundColor: colors.graphite,
+        flexDirection: "column",
+        padding: 1,
+        gap: 1,
+      },
+      header(model, "rename"),
+      renameInputPanel(project, renameInput),
       footer(screen, message, project),
     );
   }
@@ -915,6 +975,7 @@ let selectedEventIndex = Math.max(0, events.length - 1);
 let screen: Screen = "home";
 let actionMessage: string | null = null;
 let pandamateInput = "";
+let renameInput = "";
 let shutdownProgress: TuiShutdownProgress | null = null;
 let reducedMotion =
   process.env.PANDAMATE_REDUCED_MOTION === "1" ||
@@ -946,6 +1007,7 @@ function render(): void {
       selectedEventIndex,
       actionMessage,
       pandamateInput,
+      renameInput,
       shutdownProgress,
       select,
     ),
@@ -1123,6 +1185,58 @@ function submitPandamateInput(): void {
   render();
 }
 
+/**
+ * Open the rename editor for the selected project. Only durable projects carry
+ * a slug; a discovered tmux session has none, and nothing about it lives in the
+ * store to override, so the key is simply inert for it.
+ */
+function startRename(project: ProjectSummary): void {
+  if (!project.slug) {
+    actionMessage = "Only registered projects can be renamed.";
+    render();
+    return;
+  }
+  renameInput = project.name;
+  screen = "rename";
+  actionMessage = null;
+  render();
+}
+
+/**
+ * Save the typed label as the project's custom display name. An empty value is
+ * a deliberate clear back to the real title, so — unlike the free-text input —
+ * it is a valid submission rather than an error.
+ */
+function submitRename(project: ProjectSummary): void {
+  if (!project.slug) {
+    actionMessage = "Only registered projects can be renamed.";
+    screen = "home";
+    render();
+    return;
+  }
+  if (!process.send) {
+    actionMessage =
+      "Control channel unavailable. Start with spike:tui:discovered.";
+    screen = "home";
+    render();
+    return;
+  }
+  const name = renameInput.trim();
+  const request: TuiActionRequest = {
+    type: "action.request",
+    action: "project.rename",
+    slug: project.slug,
+    name,
+  };
+  process.send(request);
+  renameInput = "";
+  screen = "home";
+  actionMessage = name
+    ? `Renaming ${project.slug} to "${name}"…`
+    : `Clearing the custom name for ${project.slug}…`;
+  render();
+}
+
 renderer.keyInput.on("keypress", (key) => {
   if (screen === "input") {
     if (key.name === "escape") {
@@ -1142,6 +1256,35 @@ renderer.keyInput.on("keypress", (key) => {
       pandamateInput.length + key.sequence.length <= 2048
     ) {
       pandamateInput += key.sequence;
+    }
+    render();
+    return;
+  }
+
+  if (screen === "rename") {
+    const project = projects[selectedIndex];
+    if (key.name === "escape") {
+      renameInput = "";
+      actionMessage = "Rename cancelled.";
+      screen = project ? "project" : "home";
+    } else if (key.name === "enter" || key.name === "return") {
+      if (project) {
+        submitRename(project);
+      } else {
+        screen = "home";
+        render();
+      }
+      return;
+    } else if (key.name === "backspace") {
+      renameInput = [...renameInput].slice(0, -1).join("");
+    } else if (
+      !key.ctrl &&
+      !key.meta &&
+      key.sequence.length > 0 &&
+      !/[\u0000-\u001f\u007f]/.test(key.sequence) &&
+      renameInput.length + key.sequence.length <= 80
+    ) {
+      renameInput += key.sequence;
     }
     render();
     return;
@@ -1281,6 +1424,8 @@ renderer.keyInput.on("keypress", (key) => {
       render();
     } else if (key.name === "s") {
       requestStart(project);
+    } else if (key.name === "n") {
+      startRename(project);
     } else if (key.name === "o") {
       requestAction("session.open", project);
     } else if (key.name === "g" && project.sessionName) {

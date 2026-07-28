@@ -280,6 +280,7 @@ function fixtureProject(workspace: string): Project {
     id: "prj_fixture",
     slug: "fixture",
     title: "Fixture",
+    customDisplayName: null,
     kind: "arc",
     workspace,
     desiredState: "running",
