@@ -9,20 +9,24 @@ which home owns each capability is indexed in
 [docs/19-firstmate-responsibilities.md](19-firstmate-responsibilities.md).
 Referenced from [CLAUDE.md](../CLAUDE.md).
 
-## Code tasks are isolated — код → ветка → PR → main
+## Code tasks are isolated; landing is per-VCS
 
-Every task that changes code runs in its own isolated workspace: a fresh worktree
-on its own branch, landing **only** by merging a pull request. Never edit the
-shared checkout in place, and never push code straight to `main`. Isolate such
-tasks by default, and prefer dispatching a worker into that worktree over doing
-code in your own session. This rule is injected into every supervising FirstMate's
-launch prompt (Panda, 2026-07-28; [D-033](08-decisions.md)).
+Every task that changes code runs in its own isolated worktree on its own branch —
+never edit the shared checkout in place. Isolate such tasks by default, and prefer
+dispatching a worker into that worktree over doing code in your own session
+(Panda, 2026-07-28; [D-033](08-decisions.md)).
 
-Trivial, non-code landings — docs, memory pointers, ops notes — may go straight to
-`main` when the tree is not shared.
+**Landing is the home's call, and it differs by VCS:**
 
-The per-VCS mechanics — arc (`arc mount` + `arc pr create`, Arcanum) vs git (`git
-worktree` + a GitHub PR) — are documented in each FirstMate's own home, not here.
+- **git** — push to `main` directly (and deploy per the project's settings). Once
+  Panda has allowed pushing to main, a git FirstMate pushes **without asking
+  again**.
+- **arc** — open a PR and watch CI; never merge or deploy (the captain merges).
+- When the landing mode is genuinely unclear for a change, **ask «push or PR?»**
+  rather than guessing.
+
+The concrete per-VCS mechanics live in each FirstMate's own home;
+[docs/19](19-firstmate-responsibilities.md) indexes them.
 
 ## Don't clobber a shared working tree
 

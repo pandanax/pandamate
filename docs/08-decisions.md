@@ -316,25 +316,28 @@ changes must update this file and the affected specification.
   set, which is what the crew tooling's `crew-retire` needs.
 - **Status:** accepted.
 
-### D-033 — A FirstMate does code work in an isolated workspace, on a branch, as a PR
+### D-033 — Code work is isolated in a worktree; landing is per-VCS
 
-- **Decision:** Every supervising FirstMate's launch prompt (`supervisor.ts`,
-  the `supervises` role) now carries a standing rule: any task that changes code
-  runs in its own isolated workspace — a fresh worktree on its own branch that
-  lands as a pull request — never edited directly in the shared checkout, and the
-  FirstMate prefers dispatching a worker into that worktree over doing code work
-  in its own session. It holds across projects — arc (`arc pr create` → Arcanum)
-  and git (a GitHub PR) alike — and applies to the tasks that need it (real code
-  changes); trivial non-code landings (docs, memory pointers, ops notes) may still
-  go straight to `main` when the tree is not shared. See
-  [docs/18](18-agent-operations.md).
-- **Reason:** Panda's directive (2026-07-28): «все фестмэйты которые что-то делают
-  в коде должны создать ветку и пр всегда в изолированном воркспейсе». Un-isolated
-  code work piles onto whatever branch is checked out (the arc main mount is often
-  on someone else's product branch; the pandamate git tree is shared by parallel
-  sessions) and skips review. Putting the rule in the launch prompt makes it
-  universal to every FirstMate the control plane raises, deterministically, rather
-  than relying on each project's own docs.
+- **Decision:** Every supervising FirstMate's launch prompt (`supervisor.ts`, the
+  `supervises` role) carries a standing rule: any task that changes code runs in
+  its own isolated worktree on its own branch, never edited directly in the shared
+  checkout, and the FirstMate prefers dispatching a worker into that worktree over
+  doing code work in its own session. **Isolation is universal; landing is the
+  home's call and differs by VCS** — a **git** FirstMate pushes to `main` directly
+  (and deploys per the project's settings); an **arc** FirstMate opens a PR and
+  watches CI, and never merges or deploys (the captain merges). Once Panda has
+  allowed pushing to main, a git FirstMate pushes without asking again; when the
+  landing mode is genuinely unclear, it asks «push or PR?» rather than guessing.
+  See [docs/18](18-agent-operations.md) and the capability matrix in
+  [docs/19](19-firstmate-responsibilities.md).
+- **Reason:** Panda's directives (2026-07-28): «все фестмэйты которые что-то делают
+  в коде должны создать ветку … в изолированном воркспейсе», then «все кроме арк —
+  смело пуш в мэйны, а арк создавай пр-ы». Un-isolated code work piles onto
+  whatever branch is checked out (the arc main mount is often on someone else's
+  product branch; the pandamate git tree is shared by parallel sessions), so
+  isolation is enforced for everyone in the launch prompt. But landing ceremony is
+  a VCS-specific "how" that belongs to each home: git is low-ceremony (straight to
+  main), arc goes through Arcanum review + CI.
 - **Scope:** the `supervises` profiles (FirstMateArc, FirstMateGit) only.
   DocResearch is not a code-shipping FirstMate — its prompt keeps the light
   research framing ([D-030](#d-030--docresearch-launches-as-a-light-research-partner-not-a-firstmate))
