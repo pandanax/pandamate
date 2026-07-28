@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { requestDaemon } from "@pandamate/client";
 import type {
@@ -76,6 +76,33 @@ function watcherCommandUnder(root: string): string | null {
     return path;
   }
   return null;
+}
+
+/**
+ * The arc FirstMate's crew-tooling home for an arc workspace, derived from the
+ * arc mount root, or null when the workspace is not inside an arc checkout. An
+ * arc product workspace (e.g. market/front/monomarket) carries no watcher of its
+ * own; the shared crew tooling — and its `bin/fm-watch` — lives at
+ * `junk/pandanax/firstmate` under the same arc root. Walking up to the `.arc`
+ * directory finds that root wherever arcadia is mounted, so the home is known
+ * without configuration; an explicit `PANDAMATE_FIRSTMATE_HOME` still overrides it.
+ */
+export function arcFirstMateHome(workspace: string): string | null {
+  let dir = canonicalWorkspacePath(workspace);
+  for (;;) {
+    try {
+      if (statSync(join(dir, ".arc")).isDirectory()) {
+        return join(dir, "junk", "pandanax", "firstmate");
+      }
+    } catch {
+      // No arc root here — keep walking up.
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      return null;
+    }
+    dir = parent;
+  }
 }
 
 /**

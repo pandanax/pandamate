@@ -278,35 +278,42 @@ changes must update this file and the affected specification.
   supervision are untouched.
 - **Status:** accepted.
 
-### D-031 — An arc FirstMate resolves its Watcher from a configured firstmate home
+### D-031 — An arc FirstMate resolves its Watcher from its firstmate home, derived from the arc root
 
 - **Decision:** Watcher resolution ([D-028](#d-028--the-watcher-is-deployed-by-the-control-plane-not-by-the-firstmate))
-  searches the workspace first and, only if the workspace declares none, an
-  optional configured firstmate home. An arc FirstMate's workspace is product
-  code (e.g. monomarket at `~/arcadia/market/front/monomarket`) that carries no
-  watcher of its own; its `fm-watch` lives in the arc FirstMate's separate home
+  searches the workspace first and, only if the workspace declares none, the arc
+  FirstMate's firstmate home. An arc FirstMate's workspace is product code (e.g.
+  monomarket at `~/arcadia/market/front/monomarket`) that carries no watcher of
+  its own; its `fm-watch` lives in the arc FirstMate's separate crew-tooling home
   (`~/arcadia/junk/pandanax/firstmate/bin/fm-watch`), entirely outside the
   workspace, so the pure workspace-relative lookup returned `null` and the
   `watch` window was never deployed — nothing reaped finished crew worktrees.
-  `PANDAMATE_FIRSTMATE_HOME` names that home; `workspaceWatcherCommand` now takes
-  optional `fallbackRoots`, and the supervisor passes the configured home as one
-  fallback root **only for `kind: "arc"` projects**. The same three candidates
-  (`.pandamate/watch`, `firstmate/bin/fm-watch`, `bin/fm-watch`) and the same
-  executable-regular-file and shell-safe-path checks apply under each root.
+  That home is now **known without configuration**: `arcFirstMateHome(workspace)`
+  walks up to the workspace's `.arc` mount root and returns
+  `<arcRoot>/junk/pandanax/firstmate`, so the fix works wherever arcadia is
+  mounted with no env to set. `workspaceWatcherCommand` takes optional
+  `fallbackRoots`, and the supervisor passes the derived home as one fallback
+  root **only for `kind: "arc"` projects**. `PANDAMATE_FIRSTMATE_HOME` remains an
+  optional override that takes precedence, for when the topology moves. The same
+  three candidates (`.pandamate/watch`, `firstmate/bin/fm-watch`, `bin/fm-watch`)
+  and the same executable-regular-file and shell-safe-path checks apply under
+  each root.
 - **Reason:** the design gap in D-028 was that Watcher resolution assumed the
   watcher lives under the workspace. That holds for a git project whose
   workspace *is* the repository, but not for an arc FirstMate driving product
-  code from a separate crew-tooling home.
-- **No regression to D-028 or git projects:** the workspace search runs first
-  and unchanged, so any project that declares its own watcher (git projects like
+  code from a separate crew-tooling home. Requiring an env var to bridge the gap
+  would have left the fix inert until someone set it; deriving the home from the
+  arc root makes it self-configuring.
+- **No regression to D-028 or git projects:** the workspace search runs first and
+  unchanged, so any project that declares its own watcher (git projects like
   pandamate/mandala, or any workspace with `.pandamate/watch`) resolves exactly
-  as before and never reaches the fallback. The fallback is gated to arc kind
-  and to a configured home, so a git project without a watcher never inherits
-  the arc one, and with `PANDAMATE_FIRSTMATE_HOME` unset behaviour is identical
-  to today. The arm-and-wake watcher shape and adopted sessions remain untouched.
-  The `watch` window still runs with the product workspace as its working
-  directory and `PANDAMATE_TMUX_SESSION` set, which is what the crew tooling's
-  `crew-retire` needs.
+  as before and never reaches the fallback. The fallback is gated to `kind:
+  "arc"`, so a git project without a watcher never inherits the arc one; an arc
+  workspace outside any `.arc` root (or with the tooling absent) derives nothing
+  and degrades to today's behaviour rather than failing. The arm-and-wake watcher
+  shape and adopted sessions remain untouched. The `watch` window still runs with
+  the product workspace as its working directory and `PANDAMATE_TMUX_SESSION`
+  set, which is what the crew tooling's `crew-retire` needs.
 - **Status:** accepted.
 
 ## Proposed; validate in Phase 0

@@ -429,6 +429,40 @@ test("does not lend the arc firstmate home to a git project without its own Watc
   }
 });
 
+test("derives an arc FirstMate's firstmate home from the workspace's arc root, no config", () => {
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-arc-derive-"));
+  try {
+    // Mark the arc mount root and put the shared crew tooling where an arc
+    // checkout keeps it: junk/pandanax/firstmate/bin/fm-watch.
+    mkdirSync(join(directory, ".arc"), { recursive: true });
+    const crewBin = join(directory, "junk", "pandanax", "firstmate", "bin");
+    mkdirSync(crewBin, { recursive: true });
+    const watcher = join(crewBin, "fm-watch");
+    writeFileSync(watcher, "#!/bin/sh\nsleep 300\n");
+    chmodSync(watcher, 0o755);
+    // Product-code workspace deep under that root, like monomarket.
+    const workspace = join(directory, "market", "front", "monomarket");
+    mkdirSync(workspace, { recursive: true });
+
+    const tmux = new FakeTmux();
+    tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
+    const store = new FakeStore([
+      { ...fixtureProject(workspace), kind: "arc" as const },
+    ]);
+    // No PANDAMATE_FIRSTMATE_HOME — the home is known from the arc root alone.
+    const config = fixtureConfig(directory);
+    const supervisor = new FirstMateSupervisor({ config, store, tmux });
+
+    supervisor.reconcileNow();
+    assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
+      "firstmate-fixture",
+      "watch",
+    ]);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("stops redeploying a Watcher that never survives its backoff", () => {
   const directory = mkdtempSync(join(tmpdir(), "pandamate-watcher-"));
   try {

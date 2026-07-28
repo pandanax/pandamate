@@ -7,6 +7,7 @@ import { join } from "node:path";
 import type { PandamateConfig } from "@pandamate/config";
 import type { Project } from "@pandamate/domain";
 import {
+  arcFirstMateHome,
   firstMateWorkspaceEvidence,
   workspaceWatcherCommand,
 } from "@pandamate/firstmate-kit";
@@ -393,14 +394,19 @@ ${role} Never operate on unrelated projects or pandamate:* control-plane session
     }
     try {
       // An arc FirstMate's workspace is product code with no watcher of its
-      // own; its watcher lives in the configured firstmate home. Git projects
-      // resolve from their own workspace and are given no fallback, so a git
-      // project without a watcher never inherits the arc one.
-      const fallbackRoots =
-        project.kind === "arc" && this.#config.firstMateHome
-          ? [this.#config.firstMateHome]
-          : [];
-      const command = workspaceWatcherCommand(project.workspace, fallbackRoots);
+      // own; its watcher lives in the arc crew-tooling home. That home is known
+      // without configuration — derived from the workspace's arc root — and an
+      // explicit PANDAMATE_FIRSTMATE_HOME overrides the derived path. Git
+      // projects resolve from their own workspace and are given no fallback, so
+      // a git project without a watcher never inherits the arc one.
+      const arcHome =
+        project.kind === "arc"
+          ? (this.#config.firstMateHome ?? arcFirstMateHome(project.workspace))
+          : null;
+      const command = workspaceWatcherCommand(
+        project.workspace,
+        arcHome ? [arcHome] : [],
+      );
       if (!command) {
         return;
       }

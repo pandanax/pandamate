@@ -13,6 +13,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  arcFirstMateHome,
   FirstMateClient,
   firstMateWorkspaceEvidence,
   HookSpoolClient,
@@ -125,6 +126,29 @@ test("falls back to a firstmate home when the workspace declares no Watcher", ()
   } finally {
     rmSync(workspace, { recursive: true, force: true });
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test("derives the arc firstmate home from the workspace's arc root", () => {
+  const root = mkdtempSync(join(tmpdir(), "pandamate-arc-root-"));
+  try {
+    // A directory with no `.arc` ancestor has no derivable home.
+    const loose = join(root, "loose");
+    mkdirSync(loose, { recursive: true });
+    assert.equal(arcFirstMateHome(loose), null);
+
+    // Mark the arc mount root; a product workspace deep under it now derives the
+    // shared crew-tooling home under that same root — no configuration needed.
+    mkdirSync(join(root, ".arc"), { recursive: true });
+    const workspace = join(root, "market", "front", "monomarket");
+    mkdirSync(workspace, { recursive: true });
+    const home = join(root, "junk", "pandanax", "firstmate");
+    assert.equal(arcFirstMateHome(workspace), home);
+    // A trailing slash on the workspace is tolerated, and the root derives it too.
+    assert.equal(arcFirstMateHome(`${workspace}/`), home);
+    assert.equal(arcFirstMateHome(root), home);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
