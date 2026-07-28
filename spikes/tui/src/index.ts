@@ -1356,9 +1356,11 @@ process.on("message", (value: unknown) => {
     }
     if (result.success && result.action === "project.start") {
       // The supervisor needs a reconciliation pass before the projection shows
-      // the new runtime; until then the row says what was asked of it.
+      // the new runtime; until then the row says what was asked of it. Starting
+      // answers twice — once accepted, once with the opened tab — so a row that
+      // already has its runtime back is never talked down into starting again.
       projects = projects.map((project) =>
-        project.slug === result.slug
+        project.slug === result.slug && project.sessionName === null
           ? {
               ...project,
               state: "starting",

@@ -234,6 +234,15 @@ changes must update this file and the affected specification.
   wanted running and the supervisor rebuilds session, FirstMate, and Watcher on
   its next pass. Pandamate never launches the runtime from the TUI process
   itself, so one lifecycle owner remains.
+- **Starting includes the tab.** A FirstMate nobody can see is not back, so the
+  action does not end at the request: the host waits for the runtime and then
+  opens the project's Home tab through the same `project.open` path as `o`.
+  Readiness is the daemon's recorded `tmuxTarget`, not the presence of a session
+  name — a project keeps its session name long after that session is gone.
+  Waiting is bounded at 30 seconds; expiring leaves the project wanted running
+  and hands the user back to `o`. Because the runtime does not exist when the
+  key is pressed, one request answers twice — accepted, then opened — and a
+  tab that cannot be opened is reported without demoting a start that worked.
 - **Excluded on purpose:** starting is not confirmed like `g`, `r`, and `x`.
   Those destroy running work; this creates it and is undone by `x`. A Fleet item
   Pandamate only discovered has no slug and stays unstartable — Pandamate does

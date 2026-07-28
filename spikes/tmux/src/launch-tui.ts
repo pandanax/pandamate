@@ -430,6 +430,78 @@ async function closeAllOfPandamate(): Promise<void> {
   }
 }
 
+/**
+ * How long Pandamate waits for a started FirstMate's tmux session before it
+ * stops holding the screen. The supervisor creates the session on its first
+ * pass and reports the runtime on the next, so this is many reconciliation
+ * intervals of headroom — long enough that expiring means something is wrong,
+ * short enough that the user is not left staring at a promise.
+ */
+const startTimeoutMs = 30_000;
+
+/**
+ * Wait for the supervisor to actually build a started project's runtime, and
+ * answer with the session it built. The daemon is asked rather than tmux
+ * directly: a session name exists in durable state long after its session is
+ * gone, and only a recorded `tmuxTarget` means Pandamate has seen this one
+ * alive. Null when it does not come up in time.
+ */
+async function waitForProjectRuntime(slug: string): Promise<string | null> {
+  const deadline = Date.now() + startTimeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const project = ((await fetchDaemonProjects()) ?? []).find(
+      (candidate) => candidate.slug === slug,
+    );
+    if (
+      project?.tmuxTarget &&
+      project.tmuxSessionName &&
+      tmux.hasSession(project.tmuxSessionName)
+    ) {
+      return project.tmuxSessionName;
+    }
+  }
+  return null;
+}
+
+/**
+ * Open the tab of a FirstMate that has just been started again, and describe
+ * where it landed. A tab that cannot be opened — home is not running, the
+ * session died in the same breath — never turns the start itself into a
+ * failure: the FirstMate is up either way, and saying otherwise would send the
+ * user looking for a problem that is not there.
+ */
+async function openStartedProjectTab(
+  slug: string,
+  sessionName: string,
+): Promise<string> {
+  try {
+    const response = await requestDaemon(config.socketPath, {
+      protocol: protocolVersion,
+      requestId: `req_tui_${randomUUID()}`,
+      type: "project.open",
+      payload: { slug },
+    });
+    if (!response.ok) {
+      throw new Error(response.error.message);
+    }
+    const tab = controlTabForSession(tmux, sessionName);
+    return (
+      tab
+        ? `${slug} is running again as Pandamate Home tab ${tab.index} "${tab.name}" — switch with tmux prefix + ${tab.index}.`
+        : `${slug} is running again and opened as a Pandamate Home tab.`
+    ).slice(0, 240);
+  } catch (error) {
+    logControl(
+      "project.start.tab_failed",
+      error instanceof Error ? error.message : String(error),
+    );
+    return `${slug} is running again in ${sessionName}, but its tab could not be opened: ${
+      error instanceof Error ? error.message : "unknown error"
+    }`.slice(0, 240);
+  }
+}
+
 let refreshInProgress = false;
 let eventCursor = events.at(-1)?.sequence ?? 0;
 let lastProjectionJson = JSON.stringify({ projects, services, events });
@@ -518,12 +590,18 @@ child.on("message", async (value: unknown) => {
   }
 
   /**
-   * Start a project whose runtime is gone. There is no tmux session to address
-   * and no tab to reopen — the FirstMate is deployed again from durable state,
-   * exactly the way it was first started: the daemon records that the project
-   * is wanted running and the supervisor rebuilds the session, the FirstMate,
-   * and its Watcher on its next pass. Only projects the daemon actually knows
-   * are startable, so a discovered foreign session can never be launched here.
+   * Start a project whose runtime is gone and hand the user back the tab they
+   * lost. There is no tmux session to address and no tab to reopen — the
+   * FirstMate is deployed again from durable state, exactly the way it was
+   * first started: the daemon records that the project is wanted running and
+   * the supervisor rebuilds the session, the FirstMate, and its Watcher on its
+   * next pass. Only projects the daemon actually knows are startable, so a
+   * discovered foreign session can never be launched here.
+   *
+   * The tab is then opened for the same reason `o` exists: a FirstMate nobody
+   * can see is not really back. Waiting is the whole difficulty — the session
+   * does not exist when the key is pressed, so the request answers twice: once
+   * as soon as the start is durably accepted, and once when the tab is up.
    */
   if (request.action === "project.start") {
     try {
@@ -549,10 +627,32 @@ child.on("message", async (value: unknown) => {
         action: request.action,
         slug: project.slug,
         success: true,
-        message: `Starting ${project.slug} again in ${project.workspace}; the FirstMate is being deployed.`.slice(
-          0,
-          240,
-        ),
+        message:
+          `Starting ${project.slug} again in ${project.workspace}; opening its tab when it is up…`.slice(
+            0,
+            240,
+          ),
+      });
+      const started = await waitForProjectRuntime(project.slug);
+      if (!started) {
+        sendResult({
+          type: "action.result",
+          action: request.action,
+          slug: project.slug,
+          success: false,
+          message: `${project.slug} has not come up within ${Math.round(startTimeoutMs / 1_000)}s; it stays wanted running, so press o once its session appears.`.slice(
+            0,
+            240,
+          ),
+        });
+        return;
+      }
+      sendResult({
+        type: "action.result",
+        action: request.action,
+        slug: project.slug,
+        success: true,
+        message: await openStartedProjectTab(project.slug, started),
       });
     } catch (error) {
       sendResult({

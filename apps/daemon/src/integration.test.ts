@@ -12,7 +12,7 @@ import {
   type Request,
   type ResponseData,
 } from "@pandamate/protocol";
-import { TmuxClient } from "@pandamate/runtime-tmux";
+import { controlTabForSession, TmuxClient } from "@pandamate/runtime-tmux";
 import type { Message, Project } from "@pandamate/domain";
 
 function requestId(): string {
@@ -458,9 +458,13 @@ test("supervisor starts, stops, and recovers fake FirstMates on isolated tmux", 
     );
     assert.equal(projects.length, 2);
 
-    // What the Fleet's `s` asks for: a project whose runtime is gone is wanted
-    // running again, and the supervisor rebuilds the whole session from durable
-    // state alone — no tmux target survived the stop to address it by.
+    // The whole of what the Fleet's `s` does. A project whose runtime is gone
+    // is wanted running again and the supervisor rebuilds the session from
+    // durable state alone — no tmux target survived the stop to address it by.
+    // Then the tab the stop destroyed is opened again, which is only possible
+    // once that session actually exists, so waiting for it is the action.
+    tmux.createDetached("pandamate:home", ["/bin/sleep", "300"]);
+    assert.equal(controlTabForSession(tmux, "firstmate-beta"), null);
     await request(config.socketPath, {
       protocol: protocolVersion,
       type: "project.desired.set",
@@ -476,6 +480,13 @@ test("supervisor starts, stops, and recovers fake FirstMates on isolated tmux", 
       projects.find((project) => project.slug === "beta")?.desiredState,
       "running",
     );
+    await request(config.socketPath, {
+      protocol: protocolVersion,
+      type: "project.open",
+      payload: { slug: "beta" },
+    });
+    const betaTab = controlTabForSession(tmux, "firstmate-beta");
+    assert.equal(betaTab?.name, "beta");
 
     await stopDaemon(child, config.socketPath);
   } finally {

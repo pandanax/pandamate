@@ -60,16 +60,21 @@ Phase 1 has a working vertical slice:
   project identity survives the runtime session; `r` asks a running FirstMate
   to gracefully stop its current crew and then deploy Watcher and service
   windows again without closing the main pane.
-- `s` starts a stopped FirstMate again from its project view. A stopped project
-  has no tmux session and no Home tab left, so `o`, `g`, `r`, and `x` have
-  nothing to address; the start request travels by durable project slug
-  (`project.start`) instead, the daemon marks the project as wanted running,
-  and the supervisor rebuilds session, FirstMate, and Watcher on its next pass.
-  It is not confirmed — it creates work rather than destroying it, and `x`
-  undoes it. The row reports `starting` immediately and `o` opens its tab again
-  once it is up. Fleet items Pandamate only discovered carry no slug and stay
-  unstartable. The project footer now lists only what that item can actually do
-  now. Decision: [D-029](docs/08-decisions.md).
+- `s` starts a stopped FirstMate again from its project view and gives back the
+  tab that was lost with it. A stopped project has no tmux session and no Home
+  tab left, so `o`, `g`, `r`, and `x` have nothing to address; the start request
+  travels by durable project slug (`project.start`) instead, the daemon marks
+  the project as wanted running, and the supervisor rebuilds session, FirstMate,
+  and Watcher on its next pass. Pandamate then waits for that runtime to exist —
+  up to 30 seconds, asking the daemon rather than tmux, because a session name
+  outlives its session — and opens the project's Home tab itself, so the action
+  answers twice: `starting` as soon as the start is durably accepted, then the
+  tab number to switch to. A tab that cannot be opened never turns a successful
+  start into a failure; it says so and leaves `o`. It is not confirmed — it
+  creates work rather than destroying it, and `x` undoes it. Fleet items
+  Pandamate only discovered carry no slug and stay unstartable. The project
+  footer now lists only what that item can actually do now. Decision:
+  [D-029](docs/08-decisions.md).
 - `X` closes all of Pandamate, gracefully, in one action — `pandamate
   shutdown-all` does the same headlessly. The daemon is drained first (`system.
   drain`: supervision pauses and every project is durably marked stopped, so
@@ -131,7 +136,8 @@ The real tmux/OpenTUI smoke passes resize, Unicode, keyboard navigation, Home �
 Event Journal → Home, live Fleet updates without a TUI restart, starting a
 stopped FirstMate from its project view, and alternate-screen cleanup. The
 daemon integration test starts a stopped project again the way `s` does and
-proves the supervisor rebuilds its tmux session from durable state alone.
+proves the supervisor rebuilds its tmux session from durable state alone and
+that the project then opens as a Home tab that did not exist before.
 
 Panda explicitly authorized Claude Code, Claude Agent SDK, and model
 integration on 2026-07-26 and asked that the project be carried through the

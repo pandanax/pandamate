@@ -166,15 +166,28 @@ actions are:
 
 A stopped project has none of those: its tmux session is gone, and its Home tab
 went with it, so `o` has nothing to reopen. Its single action is `s` — start
-this FirstMate again. It is not confirmed, because it creates work rather than
-destroying it, and `x` undoes it. The request carries the durable project slug
-instead of a session name, the daemon records the project as wanted running,
-and the supervisor deploys session, FirstMate, and Watcher on its next pass;
-the row reports `starting` until then, and `o` opens its tab again once it is
-up. A Fleet item Pandamate merely discovered has no durable slug and says so
-rather than pretending it can be started. The project footer shows only the
-actions that item can actually perform now, so a stopped FirstMate offers `s`
-and never `o`, `g`, `r`, or `x`. See
+this FirstMate again and open its tab. It is not confirmed, because it creates
+work rather than destroying it, and `x` undoes it. The request carries the
+durable project slug instead of a session name, the daemon records the project
+as wanted running, and the supervisor deploys session, FirstMate, and Watcher
+on its next pass.
+
+`s` then waits for that runtime and finishes the job the user actually asked
+for: it opens the project's Home tab, exactly as `o` would, and names the tab to
+switch to. So the action answers twice — first that the start was durably
+accepted, with the row reporting `starting`, then that the FirstMate is up and
+where it landed. Readiness is read from the daemon's recorded `tmuxTarget`
+rather than from tmux directly, because a project keeps its session *name* long
+after that session is gone; only a recorded target means Pandamate has seen this
+runtime alive. Waiting is bounded at 30 seconds, after which the project stays
+wanted running and the screen says to use `o` once it appears. A tab that cannot
+be opened — home is not running, the session died in the same breath — is
+reported as such and never turns a successful start into a failure.
+
+A Fleet item Pandamate merely discovered has no durable slug and says so rather
+than pretending it can be started. The project footer shows only the actions
+that item can actually perform now, so a stopped FirstMate offers `s` and never
+`o`, `g`, `r`, or `x`. See
 [D-029](08-decisions.md#d-029--a-stopped-firstmate-is-started-again-by-slug-from-the-fleet).
 
 Graceful shutdown and immediate stopping each open a separate confirmation

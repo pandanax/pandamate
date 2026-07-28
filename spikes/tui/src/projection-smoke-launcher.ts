@@ -65,16 +65,49 @@ child.on("message", (value: unknown) => {
   const action = (value as Record<string, unknown>).action;
 
   // Starting a stopped FirstMate is answered the way the real launcher answers
-  // it: the daemon has recorded the project as wanted running, and the runtime
-  // itself only appears on a later supervisor pass.
+  // it: twice. The daemon records the project as wanted running, and only once
+  // a later supervisor pass has built the session can its tab be opened.
   if (action === "project.start") {
+    const slug = (value as Record<string, unknown>).slug;
     child.send({
       type: "action.result",
       action: "project.start",
-      slug: (value as Record<string, unknown>).slug,
+      slug,
       success: true,
-      message: "Starting personal-site again; the FirstMate is being deployed.",
+      message:
+        "Starting personal-site again in /workspace/site; opening its tab when it is up…",
     });
+    setTimeout(() => {
+      child.send({
+        type: "projection.update",
+        projects: [
+          ...demoProjects.slice(0, 3),
+          {
+            ...demoProjects[3],
+            sessionName: "firstmate-personal-site",
+            state: "running",
+            summary: "1 windows · 1 live panes · claude",
+            tmuxWindowCount: 1,
+          },
+        ],
+        services: [
+          {
+            name: "pandamate:home",
+            state: "running",
+            summary: "2 windows · 2 live panes · 1 attached",
+          },
+        ],
+        events: [],
+      });
+      child.send({
+        type: "action.result",
+        action: "project.start",
+        slug,
+        success: true,
+        message:
+          'personal-site is running again as Pandamate Home tab 1 "personal-site" — switch with tmux prefix + 1.',
+      });
+    }, 300);
     return;
   }
 

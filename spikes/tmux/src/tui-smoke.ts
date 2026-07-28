@@ -152,12 +152,18 @@ try {
   );
   tmux.sendLiteralKey(tui, "s");
   await waitFor(
-    () => tmux.capturePane(tui).includes("the FirstMate is being deployed"),
-    "a start request answered by the host",
+    () =>
+      tmux.capturePane(tui).includes("opening its tab when it is up") &&
+      tmux.capturePane(tui).includes("state: starting"),
+    "a start accepted and reported as starting",
   );
+  // The tab is the point of starting again: the second answer arrives only once
+  // the session exists, and names the tab to switch to.
   await waitFor(
-    () => tmux.capturePane(tui).includes("state: starting"),
-    "the started project reported as starting",
+    () =>
+      tmux.capturePane(tui).includes("Pandamate Home tab 1") &&
+      tmux.capturePane(tui).includes("state: running"),
+    "the started FirstMate opened as a Home tab",
   );
   tmux.run(["send-keys", "-t", tmux.resolveSession(tui), "Escape"]);
   await waitFor(
