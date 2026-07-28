@@ -24,6 +24,61 @@ test("maps durable project kinds to public FirstMate profiles", () => {
   );
 });
 
+test("only the code profiles supervise workers", () => {
+  assert.equal(firstMateProfileForProject({ kind: "arc" }).supervises, true);
+  assert.equal(firstMateProfileForProject({ kind: "git" }).supervises, true);
+  assert.equal(firstMateProfileForProject({ kind: "docs" }).supervises, false);
+});
+
+/**
+ * Reach the launch prompt for a project kind under the real (claude-code)
+ * adapter without standing up a reconciliation pass; the prompt is the final
+ * argv element.
+ */
+function launchPromptForKind(kind: Project["kind"]): string {
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-prompt-"));
+  try {
+    const supervisor = new FirstMateSupervisor({
+      config: fixtureConfig(directory),
+      store: new FakeStore([]),
+      tmux: new FakeTmux(),
+    });
+    const project = { ...fixtureProject(join(directory, "workspace")), kind };
+    const command = supervisor.launchCommand(project);
+    return command[command.length - 1] ?? "";
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+test("DocResearch launches as a light research partner, not a FirstMate", () => {
+  const prompt = launchPromptForKind("docs");
+  assert.match(prompt, /research partner \(DocResearch\)/);
+  assert.match(prompt, /clarifying questions/);
+  // The heavy supervisor framing must not reach a research workspace.
+  assert.doesNotMatch(prompt, /the main FirstMate/);
+  assert.doesNotMatch(prompt, /Supervise any workers/);
+  // Lifecycle framing is unchanged: identity header and the safety line stay.
+  assert.match(prompt, /FIRSTMATE_OP: v1/);
+  assert.match(
+    prompt,
+    /Never operate on unrelated projects or pandamate:\* control-plane sessions\./,
+  );
+});
+
+test("Arc and Git keep the full FirstMate supervisor framing", () => {
+  for (const kind of ["arc", "git"] as const) {
+    const prompt = launchPromptForKind(kind);
+    assert.match(prompt, /the main FirstMate/);
+    assert.match(prompt, /Supervise any workers you create/);
+    assert.match(
+      prompt,
+      /Never operate on unrelated projects or pandamate:\* control-plane sessions\./,
+    );
+    assert.doesNotMatch(prompt, /research partner/);
+  }
+});
+
 interface FakeWindow {
   readonly id: string;
   index: number;

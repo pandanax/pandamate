@@ -64,6 +64,14 @@ export function firstMateProfileForProject(
 ): {
   readonly name: "FirstMateArc" | "FirstMateGit" | "DocResearch";
   readonly instructions: string;
+  /**
+   * Whether this profile raises a supervising FirstMate that owns durable work
+   * and dispatches workers (Arc, Git), or a lightweight research partner that
+   * only runs a conversational session (DocResearch). It selects the
+   * launch-prompt role framing, never any lifecycle: every profile is still the
+   * long-running main process for its project.
+   */
+  readonly supervises: boolean;
 } {
   switch (project.kind) {
     case "arc":
@@ -71,18 +79,21 @@ export function firstMateProfileForProject(
         name: "FirstMateArc",
         instructions:
           "This is an Arcadia workspace. Follow repository AGENTS.md rules, use arc for VCS, and use Arcadia-native code search and ya tooling.",
+        supervises: true,
       };
     case "git":
       return {
         name: "FirstMateGit",
         instructions:
           "This is a Git workspace. Inspect its repository instructions before changing files and preserve unrelated user changes.",
+        supervises: true,
       };
     case "docs":
       return {
         name: "DocResearch",
         instructions:
           "This is a research and document workspace. Treat source attribution, document fidelity, and durable written results as primary outputs.",
+        supervises: false,
       };
   }
 }
@@ -224,12 +235,18 @@ export class FirstMateSupervisor {
         ]),
       ),
     });
+    const identity = profile.supervises
+      ? `You are running as ${profile.name}, the main FirstMate for project "${project.title}" (${project.slug}).`
+      : `You are running as a research partner (${profile.name}) for project "${project.title}" (${project.slug}).`;
+    const role = profile.supervises
+      ? "Own this project's detailed work and durable project state. Read the repository instructions and existing project context before acting. Supervise any workers you create, keep their work isolated, report bounded status and checkpoints through the Pandamate integration when available, and remain available between assignments."
+      : "Begin by asking the captain focused clarifying questions about the research goal, scope, sources, and the desired deliverable before doing any work. Keep this a lightweight, conversational research session — you are a research partner, not a code-shipping FirstMate. Capture durable findings as written notes in the workspace.";
     const prompt = `FIRSTMATE_OP: v1
-You are running as ${profile.name}, the main FirstMate for project "${project.title}" (${project.slug}).
+${identity}
 Your workspace and working directory are ${project.workspace}.
 Your runtime is the Claude Code executable at ${this.#config.claudeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. FirstMate is this long-running main Claude Code process and role; it is not a second hidden executable.
 ${profile.instructions}
-Own this project's detailed work and durable project state. Read the repository instructions and existing project context before acting. Supervise any workers you create, keep their work isolated, report bounded status and checkpoints through the Pandamate integration when available, and remain available between assignments. Never operate on unrelated projects or pandamate:* control-plane sessions.`;
+${role} Never operate on unrelated projects or pandamate:* control-plane sessions.`;
     return [
       "/usr/bin/env",
       `PANDAMATE_PROJECT_SLUG=${project.slug}`,

@@ -16,7 +16,7 @@ Panda
     ├── FirstMateGit
     │   └── project workers
     └── DocResearch
-        └── research/document workers
+        └── conversational research session (notes, no workers)
 ```
 
 Panda normally talks only to Pandamate. Direct entry into a FirstMate tmux
@@ -107,6 +107,10 @@ The first release supports three profiles:
 | `docs` / `DocResearch` | directory or document set | none required | legal, research, writing |
 
 Profiles define launch and capability policy. They do not fork the core runtime.
+The two code profiles launch as supervising FirstMates that own durable work and
+dispatch workers; `DocResearch` instead launches as a light research partner — a
+conversational session that opens by asking the captain to scope the research and
+captures durable findings as written notes ([D-030](08-decisions.md)).
 
 ## 5. MVP boundary
 

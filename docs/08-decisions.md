@@ -249,6 +249,31 @@ changes must update this file and the affected specification.
   not know how to build a session it never created.
 - **Status:** accepted.
 
+### D-030 — DocResearch launches as a light research partner, not a FirstMate
+
+- **Decision:** The launch prompt is profile-aware. `firstMateProfileForProject`
+  now also returns `supervises` — `true` for the code profiles (`FirstMateArc`,
+  `FirstMateGit`), `false` for `DocResearch` — and `launchCommand` frames the
+  role from it. Supervising profiles keep their exact wording: "the main
+  FirstMate", their per-kind instructions, and the tail that tells them to own
+  durable state, supervise workers, and report checkpoints. DocResearch instead
+  opens as "a research partner (DocResearch)" whose first act is to ask the
+  captain focused clarifying questions about the research goal, scope, sources,
+  and desired deliverable before doing any work, then runs a lightweight,
+  conversational session that captures durable findings as written notes.
+- **Reason:** A research workspace given the heavy supervisor framing was told
+  to own durable work, dispatch workers, and report checkpoints, so the launched
+  agent did not know what to do and reported confusion to the captain. The
+  research partner is a conversation that produces notes, not a code-shipping
+  orchestrator, and its opening prompt should reflect that.
+- **Unchanged:** only the role framing differs. Every profile keeps the shared
+  identity header (workspace path, runtime/executable, tmux session — these feed
+  heartbeat and lifecycle) and the final safety line "Never operate on unrelated
+  projects or pandamate:* control-plane sessions." DocResearch is still the
+  long-running main process for its project; tmux, heartbeat, Watcher, and
+  supervision are untouched.
+- **Status:** accepted.
+
 ## Proposed; validate in Phase 0
 
 ### D-012 — TypeScript core
