@@ -18,16 +18,28 @@ changes off whatever branch happens to be checked out.
   commit path-limited, open an Arcanum PR, then revert the main mount.
 - **git projects (pandamate):** dispatch a worker with the Agent tool using
   `isolation: "worktree"`, or add a `git worktree`; commit there, then land.
-- Isolation is about working *separately*; final landing still follows the
-  push-to-main rule below.
+- Isolation is about working *separately*; code changes then land as a pull
+  request (see below), not by pushing the shared checkout.
 
-## Land useful work straight to main (pandamate git)
+## Code work lands in an isolated workspace, on a branch, as a pull request
 
-For the pandamate git repo (`github.com/pandanax/pandamate`), push any useful,
-working change directly to `main` as soon as it's done — no feature branches, no
-waiting for a go-ahead to push (Panda: «любую полезность сразу пушить в мейн»).
-Verify where practical, commit with a clear message, `git push origin main`, and
-report what landed.
+Any FirstMate that changes code does it in its own isolated workspace — a fresh
+worktree on its own branch — and lands it as a **pull request**, never by editing
+the shared checkout in place. This is the default for the tasks that need it (real
+code changes); prefer dispatching a worker into that worktree over doing code work
+in your own session. The rule is injected into every supervising FirstMate's
+launch prompt, so it holds across projects (Panda, 2026-07-28;
+[D-033](08-decisions.md)).
+
+- **arc (firstmate / gnhf):** worktree under `~/arcadia-worktrees/<name>`, branch
+  off fresh trunk, commit path-limited, `arc pr create`, then revert the main mount.
+- **git (pandamate):** a `git worktree` (or an Agent worker with
+  `isolation: "worktree"`), commit there, push the branch, open a GitHub PR; the
+  FirstMate does not merge — that is the captain's call.
+
+Trivial, non-code landings — docs, memory pointers, ops notes — may still go
+straight to `main` when the tree is not shared (Panda's earlier «любую полезность
+сразу пушить в мейн», now scoped to those).
 
 ## The working tree is shared by parallel sessions
 
