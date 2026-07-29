@@ -58,6 +58,39 @@ and the real `claude-code` adapter takes an early "record running" return in
 `supervisor.ts`, so a `running/running` project (like the pandamate FirstMate
 itself) is not killed on reconcile.
 
+## The pnpm virtual store is hijackable from outside the repo (2026-07-29)
+
+`~/.zshrc` used to export `NPM_CONFIG_STORE_DIR` / `NPM_CONFIG_CACHE_DIR` /
+`NPM_CONFIG_VIRTUAL_STORE_DIR` globally, pointing at `~/monomarket-external/…` —
+an Arc VFS workaround that monomarket needs and every other repo does not. So a
+`pnpm install` here put this workspace's virtual store in monomarket's shared
+directory; a later monomarket install pruned packages this repo still linked
+into, and the links dangled. The Home TUI then died instantly on `Cannot find
+package '@anthropic-ai/claude-agent-sdk'`, and the desktop launcher reported only
+"Home did not render in time".
+
+The exports are now scoped by a `chpwd` hook that sets them inside monomarket and
+unsets them everywhere else. Three things are still worth knowing:
+
+- **Env beats `.npmrc`.** A project `.npmrc` cannot defend against this — pnpm
+  ranks the environment above project config. Verified, not assumed.
+- **Shells started before the fix still carry the old values, and children
+  inherit them.** `pnpm store path` returning a `monomarket-external` path is the
+  tell. When in doubt, install with the vars explicitly cleared:
+  `env -u NPM_CONFIG_STORE_DIR -u NPM_CONFIG_CACHE_DIR -u NPM_CONFIG_VIRTUAL_STORE_DIR pnpm install`.
+- **The symptom is a dangling symlink, not a missing package**, so the lockfile
+  and `pnpm list` look fine. Check the links and the recorded store directly:
+
+```bash
+find node_modules packages/*/node_modules apps/*/node_modules \
+     spikes/*/node_modules fixtures/*/node_modules \
+     -maxdepth 2 -type l ! -exec test -e {} \; -print    # dangling links
+grep -n 'storeDir\|virtualStoreDir' node_modules/.modules.yaml
+```
+
+`virtualStoreDir` should read `.pnpm`. Anything absolute and outside the repo
+means the next install will silently rot again.
+
 ## firstmate and gnhf are yours to keep current
 
 Maintaining and developing **firstmate** and **gnhf** — all four checkouts, git and
