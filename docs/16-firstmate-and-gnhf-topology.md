@@ -126,10 +126,11 @@ arc status --short ~/arcadia/junk/pandanax          # from inside the mount
 readlink ~/.nvm/versions/node/*/lib/node_modules/gnhf-arc
 ```
 
-## 7. Open item
+## 7. Open item at the 2026-07-27 verification
 
-The move of the arc fork out of `firstmate/vendor/gnhf-arc` into
+At that verification, the move of the arc fork out of
+`firstmate/vendor/gnhf-arc` into
 `junk/pandanax/gnhf-arc` is committed locally and published as
-[PR 14660958](https://a.yandex-team.ru/review/14660958). Until it merges, the
-local trunk sits one commit ahead of the remote, and a branch cut from that
-local trunk will carry the rename with it.
+[PR 14660958](https://a.yandex-team.ru/review/14660958). Its merge and local
+trunk state are deliberately not asserted as current here; recheck the PR and
+live checkout before relying on them.

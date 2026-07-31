@@ -1,8 +1,10 @@
 # tmux spike
 
-Reusable tmux discovery, validation, lifecycle primitives, and iTerm opening
-live in `packages/runtime-tmux`. This directory contains only real-environment
-smokes and the demonstration-specific TUI projection.
+Reusable tmux discovery, validation, lifecycle primitives, registered-project
+Home tabs, iTerm fallback, Watcher deployment, and fleet shutdown live in
+`packages/runtime-tmux`. This directory contains real-environment smokes plus
+the current launcher/controller that joins daemon projections, bounded tmux
+evidence, the Agent SDK brain, and the OpenTUI child.
 
 The smoke test creates two detached sessions on a private tmux server, verifies
 their stable names, and cleans them up:

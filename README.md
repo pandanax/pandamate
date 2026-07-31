@@ -17,16 +17,17 @@ The product is intentionally thin:
 If the instruction is simply **“continue developing Pandamate”**, start here
 and treat this section as the current handoff.
 
-### Current status — 2026-07-26
+### Current status — 2026-07-31
 
-Phase 1 has a working vertical slice:
+Phases 1 and 2 are complete, and later phases have tested vertical slices. The
+current implementation includes:
 
 - durable SQLite storage with migrations and WAL;
 - transactional project mutations plus append-only events;
 - idempotency keys and cursor-bounded Event Journal queries;
 - single-instance daemon with a private versioned Unix socket;
-- CLI for daemon lifecycle, project registration/status, desired start/stop,
-  open skeleton, events, and doctor;
+- CLI for daemon and fleet lifecycle, project onboarding/adoption, mailbox,
+  hooks, timers, decisions/memory, events, and doctor;
 - OpenTUI Home, Fleet, Project, stop confirmation, and top-level Event Journal;
 - a separate Pandamate Services projection for `home`, `write`, probes, and
   future service runtimes; these control-plane sessions never enter Fleet;
@@ -112,12 +113,20 @@ Phase 1 has a working vertical slice:
   `FirstMateArc`, `FirstMateGit`, or `DocResearch` profile, then registers and
   starts the supervised project. Registered Fleet items show that profile.
 - Existing FirstMate workspaces contribute their watcher liveness beacon and
-  latest bounded `*.status` line to the daemon projection, so Selected shows a
+  latest bounded `*.status` line to the live TUI projection, so Selected shows a
   real heartbeat age and the latest meaningful status instead of reporting the
   signal as unavailable.
 - `.claude/skills/create-project` gives the Pandamate brain the same durable
   folder-onboarding workflow and explains the concrete FirstMate runtime
   identity.
+- `n` in Project edits a durable, bounded display-name override without changing
+  the project's real title or slug. Clearing the override restores the title.
+- non-onboarding text submitted through `i` reaches a bounded Claude Agent SDK
+  brain episode. The launcher builds its briefing from current projects, active
+  decisions, unresolved messages, and recent events; the SDK stream is resumable
+  and rotates after 20 successful turns. This is still a read-only conversational
+  slice: the brain has no mutation tools and its short TUI result is not yet a
+  full Conversation screen.
 
 Phase 2 is complete. Reusable tmux discovery, stable target validation,
 argument-array execution, isolated socket support, and the iTerm opening adapter
@@ -128,17 +137,43 @@ can also adopt a live non-control tmux session without restarting its process.
 The TUI refreshes daemon projects and replays cursor-bounded events every
 500 ms, retaining its last good projection through temporary disconnects.
 
-Phase 3 now has a runnable durable vertical slice: queued/leased instructions,
+Phase 3 has a runnable durable vertical slice: queued/leased instructions,
 guarded acknowledgement/application/resolution, retry and dead-letter
 reconciliation, bounded FirstMate status and checkpoints, deduplicated hook
 ingestion with an atomic offline spool, and persisted one-shot timers that
 atomically create ordinary mailbox messages. The daemon-restart integration
-test interrupts a live message lease and completes it once after restart.
+test interrupts a live message lease and completes it once after restart. A
+daemon-owned replayer retries up to 100 spooled hooks at startup and every
+second, independently of later hook invocations.
+
+Phase 4 is partial. SQLite has an idempotent decision store with one active value
+per topic and immutable supersession history. The daemon atomically regenerates
+a single `memory/MEMORY.md` and `pandamate memory check` detects drift.
+Topic files, reviewed reconciliation/import, recovery classification, recovery
+reports, and operational backup/restore tooling are not implemented. Storage has
+an unexposed `VACUUM INTO` + checksum backup primitive, but no CLI, schedule,
+pre-migration policy, restore, or drill.
+
+Phase 5 is partial. `packages/agent-sdk` provides a bounded briefing, conservative
+project-name matching, streaming/resume/cancel support, a 45-second deadline,
+turn-based rotation, and offline/authentication errors. The live TUI launcher
+uses the brain for free-form input, but no validated brain tools, durable
+conversation projection, explicit routing workflow, or TUI cancellation control
+exist yet.
+
+Phase 6 and 7 are also partial: the live OpenTUI has Home, Fleet, Project,
+Services, Event Journal, input/rename and lifecycle confirmation/progress
+surfaces; onboarding launches `FirstMateArc`, `FirstMateGit`, and `DocResearch`
+profiles through the shared supervisor. Conversation, Memory, Sessions, and
+Diagnostics screens and fully separate adapter contracts remain future work.
+Phase 8 has a deployable personal macOS launcher and full graceful shutdown, but
+not launch-at-login installation, support bundles, backup/restore, retention,
+upgrade/rollback, or the seven-day acceptance run.
 
 The real integration test registers three projects through the CLI, adopts a
 fixture session from an isolated tmux server, restarts the daemon, and proves
-that project and event JSON are identical after restart. TypeScript check and
-the complete test suite pass.
+that project and event JSON are identical after restart. TypeScript check passes;
+the complete test suite passes with the short `TMPDIR=/tmp` documented below.
 The real tmux/OpenTUI smoke passes resize, Unicode, keyboard navigation, Home →
 Event Journal → Home, live Fleet updates without a TUI restart, starting a
 stopped FirstMate from its project view, and alternate-screen cleanup. The
@@ -156,45 +191,41 @@ running FirstMate.
 
 ### Next implementation slice
 
-Continue with **Phase 3 — hooks, mailbox, status, checkpoints, and timers**:
+Finish the remaining **Phase 3 integration gate** before widening the brain:
 
-1. add the bounded domain contracts and durable SQLite projections;
-2. implement the fast hook/event client with an offline spool;
-3. implement message leasing, acknowledgement, application, resolution, retry,
-   and dead letters;
-4. persist bounded FirstMate status/checkpoints and timer schedules;
-5. prove daemon/TUI restart during delivery does not duplicate application.
+1. add recorded real Claude Code hook fixtures and a generated example hook
+   configuration;
+2. make the fake FirstMate consume `@pandamate/firstmate-kit` end to end instead
+   of driving mailbox protocol calls from the test harness;
+3. implement and prove urgent interruption only at an evidenced safe point;
+4. add direct daemon-replayer coverage for corrupt, duplicate, and partially
+   delivered spool files.
 
-The first five items now have a tested vertical slice. Finish Phase 3 with real
-Claude hook fixtures/configuration, daemon-driven spool replay, safe urgent
-interruption, and a fake FirstMate consuming `@pandamate/firstmate-kit`
-end-to-end before beginning memory materialization.
+Then continue Phase 4 with startup recovery reports and backup/restore. Only
+after those deterministic boundaries are complete should Phase 5 gain validated
+tools for routing instructions or recording decisions.
 
 Lifecycle remains deterministic and model-free. Every behavioral change must
 update this README, the affected specification, and
 [architecture decisions](docs/08-decisions.md).
 
-### Live local state at the last verification
+### Live local state
 
-This is observational and may drift; recheck it before acting:
-
-| Session | Role | Last observed |
-|---|---|---|
-| `pandamate:home` | Pandamate control deck | attached in `/dev/ttys012` |
-| `firstmate` | adopted FirstMate candidate | attached in `/dev/ttys014` |
-| `pandamate:idle-probe` | 24-hour TUI probe | detached; excluded from Fleet |
-
-Treat existing tmux sessions as user state. Never kill `firstmate`
-during development tests. Use isolated `tmux -L` servers and fake fixtures.
+Live tmux and daemon state is deliberately not recorded here because it drifts.
+Inspect it at task start with `pnpm pandamate status`, daemon-backed projections,
+and read-only tmux discovery. Treat every existing session as user state; use
+isolated `tmux -L` servers and fake fixtures for development tests.
 
 ### Authoritative reading order
 
 1. This README for current state and next action.
-2. [Phase 1 progress](docs/12-phase-1-progress.md) for implemented evidence.
-3. [Implementation roadmap](docs/06-implementation-roadmap.md) for phase scope.
-4. [State and protocols](docs/03-state-and-protocols.md) for invariants.
-5. [Architecture decisions](docs/08-decisions.md) for accepted behavior.
-6. [Testing and acceptance](docs/07-testing-and-acceptance.md) before handoff.
+2. [Completion audit](docs/14-completion-audit.md) for the current phase matrix.
+3. [Phase 3 progress](docs/15-phase-3-progress.md) for the immediate gate.
+4. [Implementation roadmap](docs/06-implementation-roadmap.md) for phase scope.
+5. [State and protocols](docs/03-state-and-protocols.md) for current contracts
+   and explicitly marked target extensions.
+6. [Architecture decisions](docs/08-decisions.md) for accepted behavior.
+7. [Testing and acceptance](docs/07-testing-and-acceptance.md) before handoff.
 
 ## Development
 
@@ -224,6 +255,15 @@ Node. If the configured Yandex npm registry stalls or lacks a tarball, use
 permission to create temporary local Unix sockets. `spike:tmux` uses a private
 tmux server and does not touch normal tmux sessions.
 
+The Unix socket path is capped at 100 bytes. On harnesses whose system `TMPDIR`
+is already long, temporary test directories can make two supervisor tests fail
+before their assertions with `Pandamate Unix socket path is too long`. Use the
+same short runtime root as the integration fixtures:
+
+```bash
+TMPDIR=/tmp pnpm test
+```
+
 `spike:tui:discovered` must run inside tmux. It validates and displays existing
 non-control tmux sessions in the Fleet. Sessions named `pandamate:*` are
 control-plane surfaces and stay out of the project Fleet. A discovered session
@@ -236,11 +276,13 @@ child `└─ numerology-aspect`). An ambiguous session hosting two registered
 projects' crews, and a crew session for an unregistered project, stay standalone.
 Decision: [D-032](docs/08-decisions.md).
 
-In the discovered Fleet, `Enter` opens a Project view, `o` opens that tmux
-session in a new iTerm window while Pandamate stays visible, `x` opens an
-explicit stop-session confirmation, and `s` starts a registered project whose
-runtime has stopped. All active shortcuts are shown in the contextual footer.
-From Home, `e` opens the separate durable Event Journal.
+In the discovered Fleet, `Enter` opens a Project view. For a registered running
+project, `o` links window `0` as a `pandamate:home` tab and selects it; for an
+unregistered discovered session, the legacy fallback opens a separate iTerm
+window. `x` opens an explicit stop-session confirmation, `s` starts a registered
+project whose runtime has stopped, and `n` changes a registered project's
+display name. All active shortcuts are shown in the contextual footer. From
+Home, `e` opens the separate durable Event Journal.
 
 The deterministic CLI currently supports:
 
@@ -251,7 +293,13 @@ pnpm pandamate project create FirstMateGit /absolute/workspace
 pnpm pandamate project adopt mandala existing-tmux-session
 pnpm pandamate status
 pnpm pandamate start mandala
+pnpm pandamate send mandala "Continue the current task" --priority high
+pnpm pandamate inbox list mandala
+pnpm pandamate timer add mandala 2026-08-01T10:00:00Z "Resume the task"
+pnpm pandamate memory set ui.motion reduced "Use reduced motion"
+pnpm pandamate memory check
 pnpm pandamate events
+pnpm pandamate shutdown-all
 pnpm pandamate daemon stop
 ```
 
@@ -270,9 +318,13 @@ packages/config          state/runtime path validation
 packages/domain          project/event contracts and validation
 packages/protocol        versioned request/response frames
 packages/storage         SQLite migrations, projections, and event log
-packages/runtime-tmux    validated tmux discovery, lifecycle, and iTerm adapter
+packages/runtime-tmux    validated tmux discovery, lifecycle, Home tabs, iTerm fallback
+packages/firstmate-kit   mailbox/status/checkpoint client, hook spool, workspace evidence
+packages/memory          deterministic MEMORY.md materialization and drift check
+packages/agent-sdk       bounded resumable Claude brain adapter
 spikes/tmux              real tmux, navigation, TUI, and idle smokes
 spikes/tui               current OpenTUI control deck
+tools/macos              personal launcher bundle, deploy and drift check
 docs                     product specification and evidence logs
 ```
 

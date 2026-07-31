@@ -26,8 +26,10 @@ session is an escape hatch for diagnosis or fine steering.
 
 1. **External state is authoritative.** A Claude transcript is never the only
    copy of a decision, pending instruction, or recovery checkpoint.
-2. **Home screen first.** Starting `pandamate` opens the current control deck,
-   not a blank chat.
+2. **Home screen first.** Opening `Pandamate.app` (and eventually the
+   no-argument `pandamate` entry point) opens the current control deck, not a
+   blank chat. Today the CLI without a subcommand prints usage; the Desktop
+   launcher is the product entry point.
 3. **Thin control plane.** Pandamate does not duplicate a project plan already
    owned by its FirstMate.
 4. **Fresh context by default.** Long-lived identity comes from durable memory,
@@ -67,6 +69,11 @@ Panda writes natural language to Pandamate. Pandamate identifies the target,
 stores the instruction, routes it to the target inbox, tracks acknowledgement
 and application, and reports only meaningful changes.
 
+Current slice: `pandamate send` creates the durable instruction and the public
+FirstMate kit consumes it. Free-form TUI input reaches a tool-free brain, so
+semantic target selection and instruction creation from that conversation are
+not implemented yet.
+
 ### 3.4 Inspect or intervene
 
 Panda selects a FirstMate and can:
@@ -77,6 +84,11 @@ Panda selects a FirstMate and can:
 - pause, resume, restart, or stop it;
 - request a fresh summary;
 - inspect errors and recovery state.
+
+Current Project view implements status/heartbeat, open, rename, start,
+graceful shutdown, reset, immediate stop, and full-system shutdown. Message
+history, pause/resume, summary request, and detailed recovery controls are
+future screens/actions.
 
 ### 3.5 Recover after interruption
 
@@ -89,12 +101,19 @@ After power loss or process death, Pandamate:
 5. verifies interrupted operations before retrying;
 6. displays a recovery report.
 
+Desired-state/tmux reconciliation and safe fixture recovery are implemented;
+ambiguous-side-effect classification and the startup recovery report are not.
+
 ### 3.6 Change Pandamate itself
 
 When Panda changes a behavior, preference, interface rule, or architecture
 decision, Pandamate records the source message and updates the authoritative
 memory before acknowledging the change. Superseded values remain in history but
 do not remain active.
+
+The deterministic decision store, supersession, generated `MEMORY.md`, and CLI
+drift check exist. Conversational memory mutation and reviewed topic-file
+materialization/reconciliation remain Phase 4/5 work.
 
 ## 4. FirstMate types
 
@@ -113,6 +132,10 @@ conversational session that opens by asking the captain to scope the research an
 captures durable findings as written notes ([D-030](08-decisions.md)).
 
 ## 5. MVP boundary
+
+This is the intended MVP boundary, not a claim that every included item is
+already shipped. Current coverage and remaining gates are tracked in
+[14-completion-audit.md](14-completion-audit.md).
 
 ### Included
 

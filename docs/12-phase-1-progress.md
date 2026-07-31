@@ -57,7 +57,9 @@ durable event, returns to Home, and restores the terminal cleanly on exit.
 - stronger runtime schema validation of successful response payloads;
 - graceful shutdown deadline and forced fallback;
 - database integrity details in `doctor`;
-- SQLite backup/restore tooling, which is primarily a Phase 4 hardening item.
+- operational SQLite backup/restore tooling, which is primarily a Phase 4
+  hardening item. A later storage slice added an unexposed `VACUUM INTO` +
+  checksum primitive; CLI/policy/restore remain open.
 
 These do not block starting Phase 2 and remain tracked for the later hardening
 phases. Real tmux start/stop/reconciliation is Phase 2. The current CLI `start`

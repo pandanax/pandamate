@@ -9,6 +9,10 @@ authoritative state.
 Only the daemon mutates operational state. Every mutation is a transaction that
 includes its audit event.
 
+This document distinguishes the schema implemented in migration version 8 from
+target extensions. Unmarked fields and transitions below describe the current
+implementation as of 2026-07-31.
+
 ## 2. Core entities
 
 ### `project`
@@ -18,18 +22,19 @@ includes its audit event.
 | `id` | stable opaque ID |
 | `slug` | human-readable unique name |
 | `title` | display name |
+| `custom_display_name` | optional bounded Fleet label override |
 | `kind` | `arc`, `git`, or `docs` |
 | `workspace` | canonical absolute path |
 | `desired_state` | requested lifecycle state |
 | `actual_state` | observed lifecycle state |
 | `tmux_target` | unique stable `$session_id` resolved from observed tmux evidence |
-| `launch_profile` | versioned adapter configuration |
+| `tmux_session_name` | durable human-readable runtime name, even while stopped |
 | `current_summary` | bounded FirstMate summary |
 | `attention_level` | none, info, action, urgent |
 | `last_heartbeat_at` | last health signal |
-| `version` | optimistic concurrency version |
+| `version` | monotonic projection version; optimistic client checks are future work |
 
-### `agent_session`
+### `agent_session` (target, not persisted yet)
 
 Tracks a concrete FirstMate or Pandamate brain episode:
 
@@ -43,12 +48,9 @@ Tracks a concrete FirstMate or Pandamate brain episode:
 
 An instruction or response:
 
-- stable ID and idempotency key;
-- source, target, project, priority;
-- original text and optional structured intent;
-- status and status timestamps;
-- correlation and causation IDs;
-- delivery attempts;
+- stable ID; the creating command has a separately stored idempotency result;
+- project, original bounded text, and `normal`/`high`/`urgent` priority;
+- status, lease owner/expiry, created/updated timestamps, and attempts;
 - acknowledgement and resolution summary.
 
 ### `event`
@@ -63,7 +65,7 @@ Append-only envelope:
   "recordedAt": "2026-07-26T14:02:13.128+03:00",
   "type": "instruction.acknowledged",
   "projectId": "prj_...",
-  "actor": {"kind": "firstmate", "id": "agt_..."},
+  "actor": {"kind": "daemon", "id": "firstmate:mandala"},
   "correlationId": "cmd_184",
   "causationId": "evt_1840",
   "schemaVersion": 1,
@@ -77,42 +79,46 @@ Payloads are versioned and immutable. Corrections are new events.
 
 Represents active semantic truth:
 
-- stable topic key, value/summary, scope;
+- stable topic key, value, summary, and bounded source text;
 - status: active or superseded;
-- effective timestamp;
-- source message/event;
+- created/superseded timestamps;
 - superseded decision ID;
-- Markdown target and checksum.
+
+The generated Markdown target and checksum are derived, not columns on the
+decision record.
 
 ### `checkpoint`
 
 A safe continuation boundary declared by a FirstMate:
 
-- current goal and phase;
+- goal and phase;
 - completed and pending steps;
-- repository/document evidence;
 - external side effects already performed;
 - next safe action;
-- resumable Claude session ID if useful;
-- adapter-specific recovery payload.
+
+Repository evidence, resumable session identity, and adapter recovery payloads
+remain target extensions.
 
 ### `timer`
 
-Persisted schedule with due time, policy, lease, attempts, and idempotency key.
+Current timers contain a project, due time, text, priority, pending/fired/
+cancelled status, and the ID of the queued message created when they fire. Timer
+leases, attempts, recurring policy, and cancellation commands are not yet
+implemented.
 
 ## 3. Instruction lifecycle
 
 ```text
-created → queued → delivered → acknowledged → applied → resolved
-                     │              │            │
-                     └──────────────┴────────────► failed/dead-letter
+queued → leased → acknowledged → applied → resolved
+           │               │            │
+           └───────────────┴────────────► failed → queued/dead-letter
 ```
 
 Definitions:
 
-- **created:** durable record exists;
 - **queued:** routing target and delivery policy are known;
-- **delivered:** target inbox accepted the message;
+- **leased:** a FirstMate owns a bounded delivery lease; the audit event is
+  named `instruction.delivered`;
 - **acknowledged:** FirstMate explicitly understood it;
 - **applied:** it changed the active plan or behavior;
 - **resolved:** requested outcome is complete or intentionally closed.
@@ -130,23 +136,22 @@ Normal delivery is pull-at-safe-point:
 5. FirstMate reports application or rejection;
 6. daemon completes or retries the lease.
 
-FirstMate responses are typed:
+The public `FirstMateClient` exposes guarded transition calls. Conceptually a
+response is typed as:
 
 ```json
 {
   "messageId": "msg_...",
-  "disposition": "accepted",
   "summary": "Will switch after the current test run",
-  "applyAfter": "checkpoint",
-  "attention": "none"
+  "status": "acknowledged"
 }
 ```
 
 Priority:
 
-- `normal`: consume at next safe loop checkpoint;
-- `high`: consume after current tool call/atomic step;
-- `urgent`: request interruption, then reconcile before continuing.
+- `normal`, `high`, and `urgent` determine lease ordering today;
+- safe-point consumption and actual urgent interruption are policy still to be
+  implemented and proved.
 
 `tmux send-keys` is an emergency adapter, not the durable bus.
 
@@ -156,14 +161,13 @@ Every FirstMate publishes a bounded status document:
 
 ```json
 {
-  "protocolVersion": 1,
-  "projectId": "prj_...",
+  "projectSlug": "mandala",
   "state": "working",
   "activity": "Running authentication tests",
   "goal": "Fix mobile authentication",
   "progress": {"kind": "steps", "done": 3, "total": 5},
   "iteration": 18,
-  "attention": null,
+  "attention": "none",
   "safeToInterrupt": false,
   "checkpointId": "chk_...",
   "timestamp": "2026-07-26T14:42:00+03:00"
@@ -175,8 +179,10 @@ enters the main Pandamate briefing automatically.
 
 ## 6. Hook normalization
 
-Store the original hook payload in bounded archival form, then normalize it to
-stable internal events such as:
+The current hook boundary validates a bounded object, deduplicates by `hookId`,
+and appends `hook.<eventType>` with the supplied payload plus hook metadata. It
+does not yet map recorded Claude Code payloads into the richer stable vocabulary
+below:
 
 - `session.started`, `session.compacted`, `session.ended`;
 - `agent.tool.started`, `agent.tool.completed`, `agent.tool.failed`;
@@ -185,17 +191,20 @@ stable internal events such as:
 - `heartbeat.received`;
 - `checkpoint.created`.
 
-Hook schemas are treated as an external versioned API. Unknown fields are
-preserved; unknown event types do not crash ingestion.
+Unknown payload fields are preserved inside the bounded event payload and
+unknown validated event names do not crash ingestion. Recorded fixtures and
+schema-specific redaction/normalization remain Phase 3 work.
 
 ## 7. Idempotency and concurrency
 
-- Every external mutation accepts an idempotency key.
-- Hook deduplication uses session, event type, tool-use/prompt ID, and payload
-  fingerprint.
-- Timers and message deliveries use leases with expiry.
-- Project mutations check `version`.
-- Side-effecting steps record `prepared`, `executing`, and `observed` states.
+- Project creation/state/adoption/restart/rename, message creation, timer
+  creation, and decision recording accept idempotency keys.
+- Hook deduplication uses the caller-supplied stable hook ID.
+- Message deliveries use leases with expiry; timers currently do not.
+- Project `version` increments on mutation, but optimistic client version checks
+  are not implemented.
+- `prepared`/`executing`/`observed` side-effect records remain target recovery
+  work.
 - “Exactly once” is not promised across arbitrary external systems; Pandamate
   provides at-least-once attempts plus reconciliation.
 

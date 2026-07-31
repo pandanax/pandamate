@@ -1,5 +1,25 @@
 # 07. Testing and acceptance
 
+## Current automated evidence — 2026-07-31
+
+`pnpm check` type-checks 14 workspace projects. `TMPDIR=/tmp pnpm test` passes
+135 tests covering domain/protocol validation, SQLite migrations and
+transactions, memory materialization, Agent SDK streaming fixtures, Unix-socket
+client/server IPC, hook spooling, FirstMate workspace evidence, tmux argument
+boundaries/tabs/shutdown, TUI model/control protocol, daemon restart,
+supervision/recovery, CLI restart, and full shutdown.
+
+The short `TMPDIR` matters in harnesses whose system temporary path is already
+long: two supervisor tests derive their configured runtime directory below a
+temporary fixture, and otherwise can hit the production 100-byte Unix socket
+limit before the behavior under test. This is a test-fixture portability issue,
+not a passing acceptance result; it should eventually be fixed in the tests.
+
+The lists below are the complete target matrix. Items without evidence in the
+progress/audit documents remain open; notably property/fuzz testing, recorded
+real Claude hooks, brain tool routing, memory reconciliation, power-loss
+classification, backup/restore, launch-at-login, and long-duration acceptance.
+
 ## 1. Test layers
 
 ### Unit
@@ -36,7 +56,7 @@
 - start, instruct, observe, open, return, stop;
 - natural-language routing and acknowledgement;
 - daemon restart during delivery;
-- TUI disconnect/reconnect and cursor replay;
+- TUI disconnect/reconnect and cursor-based polling replay;
 - FirstMate crash and automatic recovery;
 - context rotation with semantic continuity.
 

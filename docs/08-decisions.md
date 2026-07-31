@@ -68,7 +68,8 @@ changes must update this file and the affected specification.
 
 - **Decision:** Initial profiles are FirstMateArc, FirstMateGit, and
   FirstMateDocs.
-- **Status:** accepted.
+- **Status:** accepted historically; public Docs naming was superseded by
+  D-022's `DocResearch` name while retaining `FirstMateDocs` as an input alias.
 
 ### D-015 — Adopt existing tmux sessions
 
@@ -87,7 +88,8 @@ changes must update this file and the affected specification.
 - **Decision:** Opening a FirstMate creates a new iTerm window with its own tmux
   client. Pandamate remains attached to `pandamate:home` in the original window
   instead of switching that client away from the control deck.
-- **Status:** accepted.
+- **Status:** superseded for registered projects by D-034. The separate-iTerm
+  adapter remains the fallback for unregistered discovered sessions.
 
 ### D-017 — Event Journal is a top-level Home destination
 
@@ -344,6 +346,25 @@ changes must update this file and the affected specification.
   and does not carry this rule.
 - **Status:** accepted.
 
+### D-034 — Registered FirstMates open as tabs of Pandamate Home
+
+- **Decision:** Opening a registered running project links window `0` of its
+  independent `firstmate-<slug>` session into `pandamate:home`, selects the
+  linked window, and exposes tmux window-number navigation. The FirstMate keeps
+  running in its own durable session. Closing the tab unlinks it; it must never
+  call `kill-window`, which would destroy the shared window in both sessions.
+- **Lifecycle:** stop, restart, heartbeat recovery, and full shutdown detach a
+  linked tab before killing a project session. Starting a stopped FirstMate
+  waits for the supervisor to observe the rebuilt runtime and then opens the
+  returned tab without treating tab-open failure as start failure.
+- **Fallback:** a merely discovered, unregistered session has no durable slug,
+  so D-016's separate-iTerm adapter remains available for it.
+- **Evidence:** `openSessionAsControlTab`, `closeControlTab`, stable session-ID
+  tests, daemon `project.open`/`project.tab.close`, automatic supervisor detach,
+  and the start-again integration smoke.
+- **Status:** accepted; implemented beginning with commit `cf71448` and extended
+  through the full tab lifecycle.
+
 ### D-032 — A crew session renders as children under its project, not as itself
 
 - **Decision:** A discovered non-control tmux session that only hosts another
@@ -414,8 +435,10 @@ changes must update this file and the affected specification.
   prototype on the target Mac under Node 26.5 experimental FFI, receives
   keyboard input, and restores the terminal after `q`. The older 0.1.x package
   line failed on Node because it published Bun-specific file imports.
-- **Remaining gate:** real tmux interaction, mouse/clipboard verification,
-  forced-crash restoration, idle CPU, 24-hour memory behavior, and packaging.
+- **Remaining gate:** mouse/clipboard verification, forced-crash restoration,
+  completed 24-hour memory behavior, production packaging acceptance, and the
+  terminal/color compatibility matrix. Real tmux resize, Unicode, keyboard,
+  navigation, live projection refresh, and normal cleanup are proven.
 
 ### D-014 — SQLite WAL
 

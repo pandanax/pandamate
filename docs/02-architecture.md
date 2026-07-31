@@ -12,13 +12,22 @@
 │ registry · event log · message bus · timers · reconciliation │
 └───────┬───────────────┬───────────────┬──────────────┬───────┘
         │               │               │              │
-     SQLite          memory/          tmux         Claude Agent SDK
+     SQLite          memory/          tmux         Claude Agent SDK*
         │                               │              │
         └──────── hooks/CLI ───── FirstMate sessions ──┘
 ```
 
+`*` The SDK currently runs in the TUI launcher; moving brain episode ownership
+behind the daemon boundary is target architecture.
+
 The daemon is the only writer to operational state. TUI instances, hook clients,
 and CLI commands submit typed commands to it.
+
+Implementation status (2026-07-31): the deterministic daemon, SQLite, IPC,
+tmux supervisor, mailbox/timers/hooks, decision materializer, and daemon-backed
+TUI projections are live. The Claude brain currently runs in the TUI launcher
+process, not in the daemon, and has no mutation tools. Boxes and responsibilities
+below that are not yet live are called out explicitly.
 
 ## 2. Components
 
@@ -32,53 +41,65 @@ A long-running deterministic process responsible for:
 - supervising tmux sessions and child launchers;
 - scheduling health checks, retries, and maintenance;
 - appending events and producing current projections;
-- invoking the Claude brain only for semantic operations;
+- eventually invoking/owning the Claude brain only for semantic operations
+  (the current brain is hosted by the TUI launcher);
 - materializing human-readable memory.
 
 The daemon must remain useful when Claude authentication or the network is down.
 
 ### 2.2 `pandamate`
 
-One executable with subcommands:
+The current deterministic CLI has subcommands; the Desktop launcher/
+`spike:tui:discovered` is still the TUI entry point rather than a no-argument
+CLI mode:
 
 ```text
-pandamate                     # open TUI
 pandamate start <project>
 pandamate stop <project>
 pandamate open <project>
 pandamate send <project> <text>
+pandamate inbox list|lease|ack|apply|resolve|fail ...
+pandamate timer add|list ...
+pandamate memory set|list|check ...
+pandamate project create|add|adopt|show ...
+pandamate close-tab <project>
+pandamate shutdown-all
 pandamate status [--json]
 pandamate event               # hook JSON on stdin
 pandamate doctor
-pandamate daemon install|start|stop|status
+pandamate daemon start|stop|status
 ```
 
 Commands are clients of the daemon. They do not edit SQLite directly.
 
 ### 2.3 TUI
 
-The TUI is a projection and command surface. It subscribes to daemon events over
-the socket, keeps a small local view model, and redraws only on data or animation
-ticks. Closing the TUI never stops the daemon or FirstMates.
+The TUI is a projection and command surface. Today its launcher polls bounded
+daemon project/event projections every 500 ms, overlays read-only tmux/workspace
+evidence, and pushes validated updates to the OpenTUI child over process IPC.
+Closing the TUI never stops the daemon or FirstMates. A true daemon subscription
+stream remains a later replacement for polling.
 
 ### 2.4 Claude brain
 
-Use the TypeScript Claude Agent SDK for semantic routing, summarization, and
-conversation. A brain episode receives:
+The implemented `packages/agent-sdk` slice uses the TypeScript Claude Agent SDK
+for bounded free-form conversation. A brain episode receives:
 
 - a concise Pandamate system contract;
 - a bounded current briefing;
-- the current user request;
-- only explicitly retrieved memory or event slices;
-- narrow MCP/SDK tools for Pandamate operations.
+- the current user request.
 
-The model cannot write SQLite or memory files directly. It calls validated tools
-such as `route_instruction`, `remember_decision`, `query_activity`, and
-`request_attention`.
+The live launcher currently gives the model no tools. It streams a resumable
+episode with a 45-second deadline, rotates after 20 successful turns, and returns
+a bounded answer to the Home input surface. Validated tools such as
+`route_instruction`, `remember_decision`, `query_activity`, and
+`request_attention`, durable conversation state, and a dedicated Conversation
+screen are Phase 5 follow-ups. The model will never write SQLite or memory files
+directly.
 
 ### 2.5 FirstMate adapter
 
-Every FirstMate kind implements one adapter contract:
+The target architecture gives every FirstMate kind one adapter contract:
 
 ```text
 validate(workspace, config)
@@ -90,17 +111,22 @@ stop(project, mode)
 recover(project, checkpoint)
 ```
 
-The initial adapters may share a Claude Code launcher and differ only in
-instructions, tools, and VCS policy.
+Today `FirstMateSupervisor` shares one Claude Code launcher and specializes the
+launch prompt/profile for `FirstMateArc`, `FirstMateGit`, and `DocResearch`.
+`@pandamate/firstmate-kit` supplies the deterministic mailbox, status,
+checkpoint, hook spool, and workspace-evidence boundary. The formal adapter
+interface above, adapter-specific delivery/recovery, and per-profile capability
+objects are not implemented yet.
 
 ### 2.6 Hook client
 
 Claude Code command hooks pipe JSON to `pandamate event`. The client validates,
 adds adapter/project identity, sends it to the daemon, and exits quickly.
 
-Hooks must never wait on model calls. If the daemon is unavailable, the client
-spools the event atomically to a local directory; the daemon imports the spool
-on startup.
+Hooks never wait on model calls. If the daemon is unavailable, the client spools
+the event atomically to a local directory. The daemon attempts up to 100 files
+at startup and every second; the hook CLI also tries older files before the new
+event. Recorded real Claude hook fixtures/configuration are still missing.
 
 ### 2.7 tmux runtime adapter
 
@@ -111,16 +137,17 @@ interpolated into a shell command. Command execution is injectable so parsing
 and exact argument boundaries can be tested without touching a real tmux
 server.
 
-The daemon will own reconciliation through this adapter. Spikes may orchestrate
-real demonstrations, but must consume the package instead of duplicating tmux
-execution or discovery.
+The daemon owns reconciliation through this adapter. Spikes orchestrate real
+demonstrations but consume the package instead of duplicating tmux execution or
+discovery.
 
 ## 3. Technology baseline
 
 ### Core
 
 - TypeScript with strict type checking.
-- Node.js LTS for daemon and CLI.
+- Node.js 26.5.0 pinned by `.nvmrc` for the current implementation; the eventual
+  production LTS choice remains open.
 - Claude Agent SDK for brain episodes and controlled tools.
 - SQLite in WAL mode for operational durability.
 - Zod or equivalent for every IPC, configuration, hook, and persisted payload.
@@ -128,10 +155,13 @@ execution or discovery.
 
 ### TUI decision gate
 
-Preferred candidate: OpenTUI, because its TypeScript API keeps the product in
-one language and its native renderer supports a visually rich interface.
+OpenTUI is the implemented candidate because its TypeScript API keeps the
+product in one language and its native renderer supports a visually rich
+interface.
 
-Before committing, complete a spike that proves:
+The spike already proves normal alternate-screen cleanup, resize, Unicode,
+keyboard navigation, daemon refresh, and testability. Final acceptance still
+requires:
 
 - stable alternate-screen restore after crash;
 - resize, mouse, Unicode, clipboard, and tmux behavior;
@@ -140,8 +170,8 @@ Before committing, complete a spike that proves:
 - packaging on the target macOS machine;
 - testability without a real terminal.
 
-If the spike fails, use Ratatui as a separate UI client. The daemon protocol
-makes this substitution local to the presentation layer.
+If the remaining gate fails, Ratatui remains the fallback client. The daemon
+protocol keeps that substitution local to the presentation layer.
 
 ### Packaging
 
@@ -209,10 +239,12 @@ of health; health combines:
 - hook activity;
 - FirstMate-declared state.
 
-Opening a FirstMate creates a new terminal window and attaches a separate tmux
-client. The Pandamate client remains on the home control deck. The current
-adapter supports iTerm; other terminal-compatible adapters remain isolated
-behind the same action.
+Opening a registered FirstMate links its window `0` into `pandamate:home` and
+selects that Home tab. The FirstMate still owns its independent durable session;
+closing the tab unlinks it and never kills the shared window. Unregistered
+discovered sessions use the legacy separate-iTerm-window adapter because they
+have no durable project slug. Other terminal-compatible fallbacks remain
+isolated behind the same boundary.
 
 Existing non-`pandamate:*` sessions are discovery evidence and may be adopted
 without process restart. Stable tmux IDs, not user-visible names, are used for
@@ -234,7 +266,10 @@ state toward desired state, never the reverse without recording why.
 
 ## 8. Timers
 
-Timers are persisted jobs, not in-memory `setTimeout` calls:
+The implemented timer is a persisted one-shot instruction: when due, a 500 ms
+scheduler atomically marks it fired and creates one ordinary queued mailbox
+message. The following richer jobs remain target scope rather than current
+behavior:
 
 - heartbeat evaluation;
 - message delivery retry;
@@ -245,5 +280,6 @@ Timers are persisted jobs, not in-memory `setTimeout` calls:
 - event retention and database checkpoint;
 - daemon self-health.
 
-On startup, overdue timers are claimed with a lease and processed according to
-their missed-run policy: run once, skip, or require reconciliation.
+The current scheduler fires overdue pending timers once on startup. Timer
+leases, recurring schedules, attempts, and configurable missed-run policies are
+not implemented.

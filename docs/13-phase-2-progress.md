@@ -12,9 +12,10 @@ tmux spike into `packages/runtime-tmux`:
 - isolated `tmux -L` server support;
 - session/client resolution and bounded discovery formats;
 - lifecycle helpers used by the real smoke tests;
-- separate-iTerm-window opening through an argument-array `osascript` call.
-  The adapter resolves an absolute tmux executable path before creating the
-  iTerm profile command; iTerm does not search `$PATH` for that command.
+- registered-project opening as a linked `pandamate:home` tab, with safe unlink
+  on close/stop/restart/recovery. The older separate-iTerm-window adapter remains
+  an argument-array fallback for unregistered discovered sessions and resolves
+  an absolute tmux executable because iTerm does not search `$PATH` there.
 - confirmed graceful shutdown delivery to the active pane of window `0` in an
   adopted FirstMate session, with immediate whole-session kill kept separate.
 - confirmed Reset delivery to that same main pane, instructing the FirstMate to
@@ -32,7 +33,8 @@ Unit tests verify:
 - workspace paths containing spaces remain one command argument;
 - discovery aggregates sessions and panes deterministically;
 - malformed or cross-session discovery evidence is rejected;
-- iTerm can only attach to a resolved stable tmux session ID.
+- Home tabs and iTerm fallback can only attach to resolved stable tmux session
+  IDs; closing a linked tab unlinks rather than killing the shared window.
 - graceful shutdown resolves a stable pane target, sends bounded literal text,
   and sends Enter as a separate argument-array tmux operation.
 - graceful action results retain the Fleet item as inactive instead of deleting
@@ -84,11 +86,13 @@ under a new stable tmux target, requests a restart, stops the other project,
 and restarts the daemon. The running project returns and the stopped project
 stays stopped.
 
-## Next increment
+## Subsequent progress
 
-Phase 3 adds the durable mailbox, hook ingestion/spool, bounded FirstMate status
-and checkpoints, and persisted timers. General Pandamate input routes through
-the brain only after those deterministic delivery boundaries exist.
+Phase 3 has since added the durable mailbox, hook ingestion/spool and daemon
+replayer, bounded FirstMate status/checkpoints, persisted one-shot timers, and
+the public FirstMate kit. General Pandamate input now has a bounded read-only
+brain slice; mutation tools remain gated on the unfinished Phase 3/4 recovery
+boundaries.
 
 ## Folder-first project onboarding
 

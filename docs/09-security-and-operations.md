@@ -16,6 +16,13 @@ MVP assumptions:
 
 ## 2. Required controls
 
+Implemented controls include private state/runtime modes, canonical path and
+bounded identifier validation, argument-array tmux/process execution, stable-ID
+adoption, frame/payload limits, audited idempotent core mutations, explicit TUI
+confirmations, and a tool-free brain running with `permissionMode: dontAsk`.
+Secret-pattern redaction, per-profile capability enforcement, support-bundle
+redaction, and a complete independent security review remain hardening work.
+
 - State directory and socket are accessible only to the owning user.
 - Live database, WAL, and memory are kept off synchronized/network filesystems.
 - Canonical workspace paths are registered explicitly.
@@ -34,6 +41,12 @@ MVP assumptions:
 - Pandamate never enables Claude Code permission bypass globally.
 
 ## 3. Hook safety
+
+The current telemetry hook validates size/shape, uses a 500 ms local delivery
+deadline, atomically spools mode-0600 files, retries through the daemon, and
+never blocks Claude work on telemetry failure. Configured secret-pattern
+redaction, recorded schema-specific normalization, and enforcement-hook policy
+are not implemented.
 
 Hooks must:
 
@@ -76,6 +89,11 @@ recommend an action but cannot bypass confirmation rules.
 
 ## 6. Observability
 
+Today Pandamate has append-only JSONL daemon/control/launcher logs, the Event
+Journal, projected heartbeat age/status, mailbox dead-letter events, timer
+state, hook spool files, and `memory check`. Rotation, metrics, backup status,
+context telemetry, and a Diagnostics screen remain target scope.
+
 Provide:
 
 - structured rotating daemon logs;
@@ -92,7 +110,9 @@ The Diagnostics screen links every warning to an actionable remediation.
 
 ## 7. Installation and lifecycle
 
-The hardened release supplies:
+The repository currently ships a personal Desktop launcher bundle plus
+`tools/macos/deploy.sh --check`, source daemon start/stop/status, full graceful
+fleet shutdown, and a small `doctor`. The hardened release still must supply:
 
 - `pandamate daemon install` for launch at login;
 - deterministic state/config/log locations;

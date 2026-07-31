@@ -7,6 +7,11 @@ demonstration. Do not implement the full database, daemon, or TUI in isolation.
 
 ## Phase 0 — technical spikes
 
+**Status:** partial. OpenTUI/tmux behavior and a bounded Agent SDK stream are
+implemented and tested. Real mouse/clipboard, forced-crash restoration,
+recorded Claude hooks/latency, the completed 24-hour resource result, and final
+packaging acceptance remain open.
+
 ### Goals
 
 - prove OpenTUI inside tmux on the target Mac;
@@ -31,7 +36,7 @@ demonstration. Do not implement the full database, daemon, or TUI in isolation.
 
 ## Phase 1 — durable core and CLI
 
-**Status:** vertical-slice exit criteria met; Phase 2 is next. The durable core,
+**Status:** complete. The durable core,
 project registration/projections, single-instance daemon, Unix socket, event
 query, CLI lifecycle skeleton, structured log, doctor, and restart
 demonstration are implemented. Real start/open/stop supervision moves into
@@ -79,6 +84,13 @@ tmux target, and return to Pandamate.
 
 ## Phase 3 — hooks, mailbox, and timers
 
+**Status:** vertical slice implemented; integration gate remains. Mailbox
+leasing/transitions/retries/dead letters, bounded status/checkpoints, hook
+ingestion and offline spool, daemon-driven spool replay, one-shot timers, and
+the public FirstMate client exist. Remaining work is recorded hook fixtures and
+example configuration, safe urgent interruption, end-to-end fake FirstMate kit
+consumption, and direct spool-replayer failure coverage.
+
 ### Build
 
 - `pandamate event` fast client and offline spool;
@@ -96,6 +108,12 @@ restarted midway; no duplicate application occurs.
 
 ## Phase 4 — memory and recovery
 
+**Status:** partial. Decision supersession, deterministic single-file
+`MEMORY.md` materialization, checksum drift detection, durable checkpoints, and
+safe tmux desired-state recovery, plus an unexposed `VACUUM INTO` backup
+primitive, exist. Topic-file materialization, reconciliation/import, recovery
+classification/reporting, operational backup policy/CLI, and restore do not.
+
 ### Build
 
 - decision store and supersession;
@@ -112,6 +130,12 @@ Change a UI preference, force-kill the system at controlled points, restart, and
 show the new preference active with provenance and no conflicting old rule.
 
 ## Phase 5 — Pandamate brain
+
+**Status:** partial conversational slice. The Agent SDK adapter builds a bounded
+briefing, streams/resumes/cancels, times out, rotates by turn count, and reports
+auth/offline failures. The live TUI launcher uses it for non-onboarding input.
+Validated tools, durable conversation state, explicit instruction routing,
+memory mutation, TUI cancellation, and context telemetry remain open.
 
 ### Build
 
@@ -131,6 +155,12 @@ and rotate the brain session while preserving continuity.
 
 ## Phase 6 — production TUI
 
+**Status:** partial. The daemon-backed OpenTUI has Home, Fleet, Project,
+Services, Event Journal, input/rename, lifecycle confirmation, and shutdown
+progress screens with responsive layouts and 500 ms projection refresh.
+Conversation, Memory, Sessions, Diagnostics, command palette, mouse/clipboard
+acceptance, subscription transport, and the full visual review remain open.
+
 ### Build
 
 - application shell and event subscription;
@@ -148,11 +178,16 @@ recovery, and attention scenarios.
 
 ## Phase 7 — real adapters
 
+**Status:** partial. Folder-first onboarding and shared supervisor launch paths
+exist for `FirstMateArc`, `FirstMateGit`, and `DocResearch`; existing sessions
+can be adopted. Formal adapter contracts, adapter-specific capability/recovery
+policies, and a complete real-project acceptance journey remain open.
+
 ### Build
 
 - FirstMateArc profile and Arcadia-specific validation;
 - FirstMateGit profile;
-- FirstMateDocs profile;
+- DocResearch profile (`FirstMateDocs` compatibility alias);
 - adapter-specific capabilities and safe recovery;
 - project onboarding wizard;
 - migration path for existing manually started FirstMates.
@@ -163,6 +198,11 @@ One real project of every kind is started, instructed, observed, opened, stopped
 and recovered from Pandamate.
 
 ## Phase 8 — hardening and daily use
+
+**Status:** partial. A personal macOS launcher bundle, deploy/drift check,
+diagnostic logs, and graceful whole-fleet shutdown exist. Launch-at-login,
+support bundles, retention, backups, failure/upgrade tooling, performance
+profiling, and the seven-day dogfood gate remain open.
 
 ### Build
 
@@ -183,27 +223,33 @@ and recovered from Pandamate.
 - acceptance matrix in `07-testing-and-acceptance.md` passes;
 - implementation spec updated to match shipped behavior.
 
-## 2. Suggested repository layout
+## 2. Current repository layout
 
 ```text
 apps/
 ├── cli/
-├── daemon/
-└── tui/
+└── daemon/
 packages/
+├── client/
+├── config/
 ├── domain/
 ├── protocol/
 ├── storage/
 ├── runtime-tmux/
 ├── agent-sdk/
 ├── firstmate-kit/
-├── memory/
-└── testkit/
+└── memory/
 fixtures/
-├── fake-firstmate/
-└── hook-payloads/
+└── fake-firstmate/
+spikes/
+├── tmux/                    # live launcher/controller and tmux smokes
+└── tui/                     # current OpenTUI child
+tools/macos/                 # launcher bundle and deployment
 docs/
 ```
+
+An eventual `apps/tui` promotion and recorded `fixtures/hook-payloads` remain
+roadmap items; they are not present today.
 
 Keep domain transitions independent from Node process, SQLite, tmux, Claude, and
 TUI APIs. Adapters surround a deterministic core.

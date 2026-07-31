@@ -50,6 +50,11 @@ in the separate Pandamate Services projection and never as Fleet projects.
 
 ## 3. Screens
 
+Current implementation status (2026-07-31): Home, Pandamate Services, Project,
+Event Journal, Write to Pandamate, project rename, lifecycle confirmations, and
+full-shutdown progress are live. Conversation, Memory, Sessions, Diagnostics,
+the command palette, and per-project filtered timeline are target screens.
+
 ### Home
 
 Fleet, selected summary, curated activity, Pandamate Services, and Pandamate
@@ -102,20 +107,21 @@ Global:
 | `Enter` | open selected item |
 | `e` | open the global Event Journal from Home |
 | `Esc` | back/close overlay |
-| `/` | command palette |
-| `:` | deterministic CLI command |
 | `i` | focus Pandamate input |
-| `o` | open selected tmux session in a new iTerm window |
-| `s` | start the selected FirstMate again after it stopped |
-| `g` | ask selected FirstMate to shut down gracefully |
-| `r` | reset selected FirstMate: graceful stop, then deploy again |
-| `m` | message selected FirstMate |
-| `l` | project timeline |
-| `?` | contextual help |
+| `s` on Home | open Pandamate Services |
+| `o` in Project | open a running project as a Home tab; use iTerm fallback for an unregistered discovered session |
+| `s` in Project | start a registered FirstMate again after it stopped |
+| `n` in Project | edit or clear the registered project's custom display name |
+| `g` in Project | ask a running FirstMate to shut down gracefully |
+| `r` in Project | reset a running FirstMate: graceful stop, then deploy again |
+| `x` in Project | confirm an immediate whole-session stop |
+| `R` | restart the source daemon and respawn the current TUI pane |
+| `d` on Home | toggle the OpenTUI debug overlay |
 | `X` | close all of Pandamate, gracefully |
 | `q` | close TUI, leave daemon/agents running |
 
-Mouse selection and scrolling are supported but never required.
+Mouse project selection is implemented but never required. Mouse scrolling and
+clipboard acceptance remain open Phase 0 checks.
 Every currently available keyboard action is rendered in the contextual footer;
 the user does not need to remember an undisclosed required shortcut.
 
@@ -151,17 +157,20 @@ progress estimate. Missing optional evidence renders as `not reported yet` and
 never falls back to a runtime summary or terminal scraping. Heartbeat age is
 rendered as `HH:MM:SS`, including hours beyond 24.
 
-On a Fleet item, `Enter` opens its Project view. The initial live-session
+On a Fleet item, `Enter` opens its Project view. The current live-session
 actions are:
 
-- `o`: open the selected session in a new iTerm window while keeping Pandamate
-  visible in its original window;
+- `o`: for a registered project, link window `0` into `pandamate:home` and
+  select that tab; for an unregistered discovered candidate, open the legacy
+  separate-iTerm fallback;
 - `g`: after confirmation, type a bounded graceful-shutdown instruction into
   the active pane of tmux window `0`, where the main FirstMate normally lives;
 - `r`: after confirmation, ask that same main FirstMate to gracefully dismiss
   its current crew and close owned resources, then deploy Watcher, workers, and
   service windows again without closing the main pane;
 - `x`: request stopping the entire selected tmux session;
+- `n`: change the durable Fleet display label for a registered project without
+  changing its title or slug; submit an empty value to clear the override;
 - `Esc`: return to the Fleet.
 
 A stopped project has none of those: its tmux session is gone, and its Home tab
@@ -213,7 +222,8 @@ are ignored while it runs — the window is closed as the final step — except
 after a failure, which hands the keyboard back so `Esc` returns Home. Full
 record: [17-full-shutdown.md](17-full-shutdown.md).
 
-The command palette combines deterministic commands and natural language:
+The planned command palette will combine deterministic commands and natural
+language:
 
 ```text
 Open Mandala
@@ -227,16 +237,23 @@ Commands that do not require semantics bypass Claude.
 
 ## 5. tmux navigation
 
-`open` creates a separate iTerm window and attaches a new tmux client to the
-FirstMate target. The Pandamate client stays attached to `pandamate:home`, so
-the control deck remains available without a return shortcut. Closing the new
-terminal window detaches that client but does not stop the FirstMate session.
+For registered projects, `open` links the FirstMate's window `0` into
+`pandamate:home`, names it for the project, and selects it. The FirstMate keeps
+running in its own `firstmate-<slug>` session; the Home window is a second link
+to the same tmux window. Closing a project tab must unlink it with
+`closeControlTab`/`pandamate close-tab`, never `kill-window`, because killing a
+linked window would destroy it in the FirstMate's own session too. The status
+bar exposes tmux prefix + window-number navigation back to Home.
+
+An unregistered discovered session has no project slug for the daemon-backed
+tab path, so it uses `openSessionInNewITermWindow` as a fallback. Closing that
+terminal detaches its client without stopping the session.
 
 The terminal-opening adapter is isolated from tmux discovery and lifecycle
 control so another supported terminal path can be added without changing the
 TUI protocol.
 
-Direct FirstMate mode displays a small tmux status segment:
+Direct FirstMate tabs display a small tmux status segment:
 
 ```text
 PANDAMATE ← return | Mandala | working | heartbeat 4s
@@ -269,14 +286,19 @@ Rules:
 - **Compact (<80):** one panel at a time and persistent status header.
 - **Non-interactive:** plain text or JSON from CLI; no escape sequences.
 
-Support true color, 256-color fallback, `NO_COLOR`, high contrast, and terminal
-resize without loss of input.
+Terminal resize without loss of input is implemented. True color is the current
+path; the 256-color fallback, `NO_COLOR`, and high-contrast modes remain target
+compatibility work.
 
 ## 8. Rendering and data rules
 
-- TUI never reads SQLite, tmux, or Markdown directly.
-- All views are daemon projections.
-- Event subscription resumes from a sequence cursor after reconnect.
+- The OpenTUI child never reads SQLite, tmux, or Markdown directly. Its launcher
+  reads daemon projections plus bounded tmux/workspace evidence and sends a
+  validated IPC model.
+- Durable projects/events come from the daemon; Services and unregistered
+  candidates are read-only tmux projections owned by the launcher.
+- The current 500 ms event polling resumes from a sequence cursor after
+  reconnect; a true subscription stream is not implemented yet.
 - Optimistic UI is allowed only for reversible navigation, not lifecycle state.
 - Long text is wrapped/truncated with an explicit expand action.
 - Raw transcripts require deliberate navigation and are never streamed home.

@@ -2,8 +2,20 @@
 
 ## 1. Memory hierarchy
 
+### Implemented slice — 2026-07-31
+
+SQLite migration 7 stores bounded decisions with one active value per topic and
+immutable supersession history. The daemon materializes all active decisions
+into one mode-0600 `memory/MEMORY.md` at startup and after `decision.record`;
+`pandamate memory list --history` exposes history and `pandamate memory check`
+compares the generated content checksum with disk.
+
+The hierarchy below is the target layout. Only `MEMORY.md` exists today;
+identity/preferences/product/project/decision/playbook topic files, a bounded
+index over those files, and reviewed import/reconciliation are not implemented.
+
 ```text
-state/pandamate.db              operational source of truth
+state.sqlite3                   operational source of truth
 memory/
 ├── MEMORY.md                  bounded index loaded into brain episodes
 ├── identity.md                stable role and relationship
@@ -31,7 +43,8 @@ Topic files are loaded on demand.
 
 ## 2. Memory write protocol
 
-When Panda communicates a durable correction or decision:
+The target write protocol when Panda communicates a durable correction or
+decision is:
 
 1. record the source message event;
 2. let the brain propose a typed memory mutation;
@@ -41,8 +54,11 @@ When Panda communicates a durable correction or decision:
 6. record `memory.updated`;
 7. only then acknowledge “remembered”.
 
-The model never directly edits authoritative memory. Its proposed mutation is
-validated and applied by deterministic code.
+Today the deterministic CLI/IPC path starts at step 3: `pandamate memory set`
+validates and transactionally records the decision and its audit event, then the
+daemon atomically regenerates `MEMORY.md`. The brain has no mutation tools, so
+steps 1–3 as a conversational workflow and a distinct `memory.updated` event are
+not implemented. The model never directly edits authoritative memory.
 
 ## 3. What deserves memory
 
@@ -66,7 +82,8 @@ Do not persist:
 ## 4. Freshness and conflict handling
 
 Each memory topic has one active value. New values explicitly supersede old
-ones. Materialized Markdown shows:
+ones. The current generated `MEMORY.md` shows topic, summary, value, source,
+decision ID, and recorded timestamp. The richer target materialization shows:
 
 - current decision first;
 - effective and modified timestamps;
@@ -74,7 +91,9 @@ ones. Materialized Markdown shows:
 - short rationale;
 - superseded history only as references.
 
-Consistency maintenance checks:
+Current consistency checking compares the complete generated content checksum
+and relies on the SQLite unique index for one active decision per topic. Target
+maintenance additionally checks:
 
 - DB decision matches Markdown checksum;
 - every active topic has one active record;
@@ -82,13 +101,20 @@ Consistency maintenance checks:
 - index points only to existing files;
 - timestamps and project summaries are not silently stale.
 
-If DB and Markdown disagree, the database event history is authoritative and the
-Markdown is regenerated. Manual Markdown edits are imported only through a
-reviewed `memory reconcile` flow.
+If DB and Markdown disagree, the database event history is authoritative. A
+daemon restart regenerates Markdown; `memory check` only reports drift and does
+not repair it. Manual Markdown import through a reviewed `memory reconcile` flow
+is not implemented.
 
 ## 5. Brain episode lifecycle
 
-Pandamate identity is continuous; its Claude context is not.
+Pandamate identity is continuous; its Claude context is not. The implemented
+slice builds a JSON briefing capped at 12,000 characters from at most 100
+projects, 100 active decisions, 50 unresolved messages, and 100 recent events.
+It resumes one SDK session, enforces a 45-second deadline and USD 0.25 per-call
+budget, and rotates after 20 successful turns. Durable episode/session records,
+context telemetry, retrieval tools, and end-of-episode summaries remain target
+work.
 
 ### Start
 
@@ -132,6 +158,14 @@ Checkpoints must describe observable state, not merely “continue working”.
 
 ## 7. Recovery algorithm
 
+The daemon currently acquires the lock, opens/migrates SQLite, replays the hook
+spool on a one-second loop, retries expired mailbox leases, observes tmux, and
+recreates missing desired-running sessions. It does not yet persist an
+operation-recovery journal, classify ambiguous side effects, resume/replace
+brain sessions after process loss, or publish a startup recovery report.
+
+The complete target algorithm is:
+
 On daemon startup:
 
 1. acquire a single-instance lock;
@@ -161,6 +195,11 @@ Previously running FirstMates have `desired_state=running` and restart
 automatically unless the interrupted step belongs to the last two classes.
 
 ## 9. Power-loss durability
+
+The first mechanisms below exist in partial form: SQLite WAL/transactions,
+atomic Markdown/spool rename, and acknowledgement only after the DB transaction.
+Directory fsync, backup policy/drills, and pre-migration backup are not
+implemented. The complete target guarantees are:
 
 - SQLite WAL with transactions and deliberate synchronous policy;
 - atomic write-to-temp plus rename for Markdown;

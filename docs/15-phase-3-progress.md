@@ -31,8 +31,10 @@ safe action. Neither API accepts terminal output or an unbounded transcript.
 - a stable hook ID deduplicates retries in SQLite;
 - when the daemon is unavailable, an atomic mode-0600 JSON file is written
   under the private state-directory spool;
-- the next hook invocation replays prior files in order before delivering the
-  new event.
+- the hook CLI replays prior files in order before delivering the new event;
+- independently, the daemon's `HookSpoolReplayer` attempts up to 100 files at
+  startup and every second. Delivery stops at the first unavailable response so
+  ordering is preserved.
 
 ## Persisted timers
 
@@ -43,7 +45,11 @@ scheduler passes cannot create a duplicate message.
 ## Remaining Phase 3 gate
 
 - recorded Claude Code hook fixtures and generated example configuration;
-- automatic spool replay independent of the next hook invocation;
 - urgent interruption policy with safe-point evidence;
 - an end-to-end fixture that consumes the public FirstMate kit rather than
-  invoking protocol calls from the test harness.
+  invoking protocol calls from the test harness;
+- direct replayer coverage for corrupt, duplicate, and partially delivered
+  spool batches.
+
+Phase 4/5 work has begun in parallel as narrow slices (decision materialization
+and a tool-free brain), but that does not close these Phase 3 integration gates.

@@ -25,7 +25,8 @@ pnpm pandamate project create <profile> <absolute-folder>
 6. Report the public profile, workspace, slug, desired state, actual state, and
    tmux session when available.
 7. Do not create a second registration when the slug already exists. Show the
-   existing project and ask for an explicit rename or reuse decision.
+   existing project and ask whether to reuse it or choose another workspace/
+   slug. A custom Fleet display name does not change slug identity.
 
 ## Runtime identity
 
@@ -34,7 +35,11 @@ Explain this when Panda asks where FirstMate lives:
 - Pandamate starts the main FirstMate as a long-running Claude Code process.
 - The executable defaults to `~/.local/bin/claude`.
 - The process starts in the registered workspace.
-- Its tmux session is `pandamate:<project-slug>`.
+- Its independent tmux session is `firstmate-<project-slug>`; opening a
+  registered project links window `0` into `pandamate:home` as a tab without
+  moving or killing the durable session.
+- The supervisor deploys a declared Watcher beside code-profile FirstMates and
+  publishes `PANDAMATE_TMUX_SESSION`; `DocResearch` has no crew contract.
 - The selected profile and FirstMate operating contract are injected in the
   launch prompt. FirstMate is a role and supervised process, not a separate
   hidden executable.
