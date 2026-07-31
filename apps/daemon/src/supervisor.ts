@@ -240,16 +240,10 @@ export class FirstMateSupervisor {
       ? `You are running as ${profile.name}, the main FirstMate for project "${project.title}" (${project.slug}).`
       : `You are running as a research partner (${profile.name}) for project "${project.title}" (${project.slug}).`;
     const runtime = profile.supervises
-      ? `Your runtime is the Claude Code executable at ${this.#config.claudeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. FirstMate is this long-running main Claude Code process and role; it is not a second hidden executable.`
+      ? `Your runtime is the Claude Code executable at ${this.#config.claudeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. FirstMate is this long-running main Claude Code process and role; it is not a second hidden executable. Pandamate supplies the durable project facts kind=${project.kind} and mergeMode=${project.mergeMode}; apply the selected FirstMate protocol to those values.`
       : `Your runtime is the Claude Code executable at ${this.#config.claudeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. You are this long-running main Claude Code process for the project — not a second hidden executable, and there is no crew, worktree, or pull-request machinery to run.`;
-    const landing =
-      project.kind === "git"
-        ? project.mergeMode === "auto"
-          ? "This project's merge mode is auto: push the isolated branch, open a PR, enable the forge's native auto-merge, and watch required CI. The forge merges after checks pass. Do not push the protected default branch. Do not ask the captain to merge. Merge mode belongs to the project, not to FirstMate."
-          : "This project's merge mode is manual: push the isolated branch, open a PR, watch required CI, and wait for the captain to merge. Do not merge or push the protected default branch. Merge mode belongs to the project, not to FirstMate."
-        : "For arc, open a PR and watch CI, but never merge or deploy; the captain merges.";
     const role = profile.supervises
-      ? `Own this project's detailed work and durable project state. Read the repository instructions and existing project context before acting. Supervise any workers you create, keep their work isolated, report bounded status and checkpoints through the Pandamate integration when available, and remain available between assignments. Any task that changes code runs in its own isolated worktree on its own branch, never edited directly in the shared checkout; isolate such tasks by default and prefer dispatching a worker into that worktree over doing code work in your own session. ${landing}`
+      ? "Own this project's detailed work and durable project state. Read the repository instructions and existing project context before acting. Supervise any workers you create, keep their work isolated, report bounded status and checkpoints through the Pandamate integration when available, and remain available between assignments. Any task that changes code runs in its own isolated worktree on its own branch, never edited directly in the shared checkout; isolate such tasks by default and prefer dispatching a worker into that worktree over doing code work in your own session. Apply the VCS-specific landing contract owned by the selected FirstMate protocol."
       : "Begin by asking the captain focused clarifying questions about the research goal, scope, sources, and the desired deliverable before doing any work. Keep this a lightweight, conversational research session — you are a research partner, not a code-shipping FirstMate. Your product is documents — research notes, a filled wiki, written reports — not pull requests, and you neither dispatch workers nor open worktrees. Capture durable findings as written notes in the workspace.";
     const prompt = `FIRSTMATE_OP: v1
 ${identity}
@@ -260,6 +254,8 @@ ${role} Never operate on unrelated projects or pandamate:* control-plane session
     return [
       "/usr/bin/env",
       `PANDAMATE_PROJECT_SLUG=${project.slug}`,
+      `PANDAMATE_PROJECT_KIND=${project.kind}`,
+      `PANDAMATE_MERGE_MODE=${project.mergeMode}`,
       `PANDAMATE_TMUX_SESSION=${targetForProject(project.slug)}`,
       `PANDAMATE_SOCKET_PATH=${this.#config.socketPath}`,
       `PANDAMATE_HOOK_SPOOL_DIR=${this.#config.hookSpoolDirectory}`,

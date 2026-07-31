@@ -55,7 +55,9 @@ This inventory includes production and spike sources, but excludes test-only use
 | `PANDAMATE_FIRSTMATE_HOME` | `apps/daemon/src/supervisor.ts`<br>`packages/config/src/index.ts`<br>`packages/firstmate-kit/src/index.ts` |
 | `PANDAMATE_HEARTBEAT_STALE_MS` | `packages/config/src/index.ts` |
 | `PANDAMATE_HOOK_SPOOL_DIR` | `apps/daemon/src/supervisor.ts`<br>`packages/firstmate-kit/src/hook-cli.ts` |
+| `PANDAMATE_MERGE_MODE` | `apps/daemon/src/supervisor.ts` |
 | `PANDAMATE_NODE` | `spikes/tmux/src/idle-probe.ts`<br>`spikes/tmux/src/tui-smoke.ts` |
+| `PANDAMATE_PROJECT_KIND` | `apps/daemon/src/supervisor.ts` |
 | `PANDAMATE_PROJECT_SLUG` | `apps/daemon/src/supervisor.ts`<br>`packages/firstmate-kit/src/hook-cli.ts` |
 | `PANDAMATE_PROJECTS_JSON` | `spikes/tmux/src/launch-tui.ts`<br>`spikes/tui/src/index.ts`<br>`spikes/tui/src/model.ts` |
 | `PANDAMATE_RECONCILE_INTERVAL_MS` | `packages/config/src/index.ts` |

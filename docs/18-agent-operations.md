@@ -16,20 +16,13 @@ never edit the shared checkout in place. Isolate such tasks by default, and pref
 dispatching a worker into that worktree over doing code in your own session
 (Panda, 2026-07-28; [D-033](08-decisions.md)).
 
-**Landing is the project's call, and merge authority is durable project state:**
-
-- **git + `mergeMode: auto`** — push an isolated branch, open a PR, enable the
-  forge's native auto-merge, and watch required CI. The forge merges after the
-  checks pass; do not ask Panda again.
-- **git + `mergeMode: manual`** — push an isolated branch, open a PR, watch CI,
-  and wait for Panda to merge. Never infer merge authority from the FirstMate
-  profile itself.
-- **arc** — open a PR and watch CI; never merge or deploy (the captain merges).
-- If merge mode is absent or invalid, fail closed and ask Panda to set the
-  project's mode; never guess or substitute a FirstMate-wide default.
-
-The concrete per-VCS mechanics live in each FirstMate's own home;
-[docs/19](19-firstmate-responsibilities.md) indexes them.
+Landing authority is durable project state, not a preference of the running
+FirstMate.
+Pandamate stores the project kind and merge mode and passes both facts unchanged
+to the launched protocol through its prompt and environment.
+It does not interpret those facts into VCS commands or approval rules.
+The concrete semantics and mechanics live in each FirstMate's own home;
+[docs/19](19-firstmate-responsibilities.md) indexes their owners.
 
 ## Generated documentation before commit
 
