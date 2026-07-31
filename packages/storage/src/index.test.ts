@@ -117,6 +117,48 @@ test("updates desired state and event atomically", () => {
   }
 });
 
+test("stores merge authority on the project", () => {
+  let id = 0;
+  const store = new PandamateStore(":memory:", {
+    now: () => new Date("2026-08-01T12:00:00.000Z"),
+    createId: (prefix) => `${prefix}_merge_${++id}`,
+  });
+  try {
+    const project = store.createProject(
+      {
+        slug: "pandamate",
+        title: "Pandamate",
+        kind: "git",
+        workspace: "/workspace/pandamate",
+      },
+      "test:create:merge-mode",
+    );
+    assert.equal(project.mergeMode, "manual");
+
+    const automatic = store.setProjectMergeMode(
+      "pandamate",
+      "auto",
+      "test:set:merge-mode",
+    );
+    assert.equal(automatic.mergeMode, "auto");
+    assert.equal(automatic.version, 2);
+    assert.equal(
+      store.listEvents().at(-1)?.type,
+      "project.merge_mode.changed",
+    );
+    assert.deepEqual(
+      store.setProjectMergeMode(
+        "pandamate",
+        "auto",
+        "test:set:merge-mode",
+      ),
+      automatic,
+    );
+  } finally {
+    store.close();
+  }
+});
+
 test("overrides and clears a project's custom display name idempotently", () => {
   let id = 0;
   const store = new PandamateStore(":memory:", {

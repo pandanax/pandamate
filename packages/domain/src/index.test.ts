@@ -8,6 +8,7 @@ import {
   validateCreateProjectInput,
   validateAdoptTmuxSessionInput,
   validateIdempotencyKey,
+  validateMergeMode,
   validateProjectSlug,
   validateTmuxTarget,
 } from "./index.ts";
@@ -18,14 +19,41 @@ test("validates and normalizes project input", () => {
       slug: "mandala-web",
       title: " Mandala ",
       kind: "git",
+      mergeMode: "manual",
       workspace: "/workspace/mandala",
     }),
     {
       slug: "mandala-web",
       title: "Mandala",
       kind: "git",
+      mergeMode: "manual",
       workspace: "/workspace/mandala",
     },
+  );
+});
+
+test("validates project-owned merge modes", () => {
+  assert.equal(validateMergeMode("auto"), "auto");
+  assert.equal(validateMergeMode("manual"), "manual");
+  assert.throws(() => validateMergeMode("firstmate"));
+  assert.equal(
+    validateCreateProjectInput({
+      slug: "automerge",
+      title: "Automerge",
+      kind: "git",
+      mergeMode: "auto",
+      workspace: "/workspace/automerge",
+    }).mergeMode,
+    "auto",
+  );
+  assert.throws(() =>
+    validateCreateProjectInput({
+      slug: "arc-project",
+      title: "Arc project",
+      kind: "arc",
+      mergeMode: "auto",
+      workspace: "/workspace/arc-project",
+    }),
   );
 });
 
@@ -79,6 +107,7 @@ test("builds project onboarding for all public profile names", () => {
         slug: "my-site",
         title: "My Site",
         kind: "git",
+        mergeMode: "manual",
         workspace: "/workspace/My Site",
       },
     },

@@ -29,6 +29,7 @@ bounded domain vocabularies are generated in the
 | `title` | display name |
 | `custom_display_name` | optional bounded Fleet label override |
 | `kind` | `arc`, `git`, or `docs` |
+| `merge_mode` | project-owned merge authority: git `auto` enables forge auto-merge; `manual` waits for Panda (the only valid mode for arc/docs) |
 | `workspace` | canonical absolute path |
 | `desired_state` | requested lifecycle state |
 | `actual_state` | observed lifecycle state |

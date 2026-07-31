@@ -29,7 +29,7 @@ of who realizes each capability.
 | Capability | Common contract (Pandamate) | FirstMate-Git | FirstMate-Arc |
 |---|---|---|---|
 | VCS | work in a worktree of your project's VCS | git: branch, `git worktree`, `gh` | arc: `arc mount`, Arcanum |
-| Land code | isolate the work; land the way your VCS does | push `main` directly **and deploy — per project settings** (no PR ceremony) | **PR only + watch CI**; captain merges, never deploys |
+| Land code | isolate work; read merge authority from the project | branch → PR/MR → required CI; `auto` enables native auto-merge, `manual` waits for Panda | **PR only + watch CI**; captain merges, never deploys |
 | Worktree | isolate every code task | `git worktree` | `arc mount` → `~/arcadia-worktrees/` |
 | Watch | a zero-LLM watcher supervises the crew | git watcher | `bin/fm-watch` |
 | Cleanup | reap finished work; leave nothing dangling | git worktree prune / reap | `crew-retire` / `reap_orphans` |

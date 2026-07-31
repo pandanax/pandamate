@@ -4,10 +4,10 @@ export function formatProjects(projects: readonly Project[]): string {
   if (projects.length === 0) {
     return "No registered projects.\n";
   }
-  const lines = ["PROJECT             KIND   DESIRED   ACTUAL       WORKSPACE"];
+  const lines = ["PROJECT             KIND   MERGE    DESIRED   ACTUAL       WORKSPACE"];
   for (const project of projects) {
     lines.push(
-      `${project.slug.padEnd(19)} ${project.kind.padEnd(6)} ${project.desiredState.padEnd(9)} ${project.actualState.padEnd(12)} ${project.workspace}`,
+      `${project.slug.padEnd(19)} ${project.kind.padEnd(6)} ${project.mergeMode.padEnd(8)} ${project.desiredState.padEnd(9)} ${project.actualState.padEnd(12)} ${project.workspace}`,
     );
   }
   return `${lines.join("\n")}\n`;

@@ -394,6 +394,7 @@ ${list(aliasPropertyStrings(protocolFile, "Request", "type"))}
 |---|---|
 ${[
       ["Project kinds", stringArray(domainFile, "projectKinds")],
+      ["Project merge modes", stringArray(domainFile, "mergeModes")],
       ["FirstMate profiles", stringArray(domainFile, "firstMateProfiles")],
       ["Desired states", stringArray(domainFile, "desiredStates")],
       ["Actual states", stringArray(domainFile, "actualStates")],

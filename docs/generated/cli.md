@@ -24,6 +24,7 @@ Usage:
   pandamate memory check [--json]
   pandamate project add <slug> <title> <arc|git|docs> <absolute-workspace>
   pandamate project create <FirstMateArc|FirstMateGit|DocResearch> <absolute-workspace> [title]
+  pandamate project merge-mode <slug> <auto|manual> [--json]
   pandamate project adopt <slug> <tmux-session> [--json]
   pandamate project show <slug> [--json]
   pandamate events [--after <sequence>] [--limit <count>] [--json]

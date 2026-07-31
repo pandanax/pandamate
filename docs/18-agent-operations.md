@@ -16,17 +16,29 @@ never edit the shared checkout in place. Isolate such tasks by default, and pref
 dispatching a worker into that worktree over doing code in your own session
 (Panda, 2026-07-28; [D-033](08-decisions.md)).
 
-**Landing is the home's call, and it differs by VCS:**
+**Landing is the project's call, and merge authority is durable project state:**
 
-- **git** — push to `main` directly (and deploy per the project's settings). Once
-  Panda has allowed pushing to main, a git FirstMate pushes **without asking
-  again**.
+- **git + `mergeMode: auto`** — push an isolated branch, open a PR, enable the
+  forge's native auto-merge, and watch required CI. The forge merges after the
+  checks pass; do not ask Panda again.
+- **git + `mergeMode: manual`** — push an isolated branch, open a PR, watch CI,
+  and wait for Panda to merge. Never infer merge authority from the FirstMate
+  profile itself.
 - **arc** — open a PR and watch CI; never merge or deploy (the captain merges).
-- When the landing mode is genuinely unclear for a change, **ask «push or PR?»**
-  rather than guessing.
+- If merge mode is absent or invalid, fail closed and ask Panda to set the
+  project's mode; never guess or substitute a FirstMate-wide default.
 
 The concrete per-VCS mechanics live in each FirstMate's own home;
 [docs/19](19-firstmate-responsibilities.md) indexes them.
+
+## Generated documentation before commit
+
+This repository installs `.githooks/pre-commit` through the root `prepare`
+script. The hook loads the Node version pinned by `.nvmrc` through `nvm use`, then
+runs `pnpm docs:generate` on every commit. If generation changes
+anything under `docs/generated`, the commit stops so the author can review and
+stage the result before retrying. It never stages files silently. CI then runs
+`pnpm docs:check` as the independent clean-checkout gate.
 
 ## Don't clobber a shared working tree
 

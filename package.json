@@ -9,11 +9,12 @@
     "node": ">=26.5.0 <27"
   },
   "scripts": {
+    "prepare": "node scripts/install-git-hooks.mjs",
     "check": "pnpm -r check && pnpm docs:check",
     "test": "pnpm -r test",
     "verify": "pnpm check && pnpm test",
-    "docs:generate": "node scripts/docs/generate.ts",
-    "docs:check": "tsc -p scripts/docs/tsconfig.json && node scripts/docs/generate.ts --check",
+    "docs:generate": "node --experimental-strip-types scripts/docs/generate.ts",
+    "docs:check": "tsc -p scripts/docs/tsconfig.json && node --experimental-strip-types scripts/docs/generate.ts --check",
     "pandamate": "pnpm --filter @pandamate/cli start --",
     "daemon": "pnpm --filter @pandamate/daemon start",
     "spike:tui": "pnpm --filter @pandamate/spike-tui start",
