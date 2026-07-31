@@ -13,6 +13,7 @@ import {
   validateHookInput,
   validateRecordDecisionInput,
   validateIdempotencyKey,
+  validateMergeMode,
   validateProjectSlug,
   validateRuntimeSessionName,
   validateTmuxSessionName,
@@ -27,6 +28,7 @@ import {
   type FirstMateStatus,
   type Message,
   type MessageStatus,
+  type MergeMode,
   type HookInput,
   type Decision,
   type RecordDecisionInput,
@@ -208,6 +210,14 @@ const migrations = [
       ALTER TABLE projects ADD COLUMN custom_display_name TEXT;
     `,
   },
+  {
+    version: 9,
+    description: "Project-owned automatic or manual merge mode",
+    sql: `
+      ALTER TABLE projects ADD COLUMN merge_mode TEXT NOT NULL DEFAULT 'manual'
+        CHECK (merge_mode IN ('auto', 'manual'));
+    `,
+  },
 ] as const;
 
 function text(row: SqlRow, field: string): string {
@@ -244,6 +254,7 @@ function projectFromRow(row: SqlRow): Project {
     title: text(row, "title"),
     customDisplayName: nullableText(row, "custom_display_name"),
     kind: text(row, "kind") as Project["kind"],
+    mergeMode: text(row, "merge_mode") as Project["mergeMode"],
     workspace: text(row, "workspace"),
     desiredState: text(row, "desired_state") as Project["desiredState"],
     actualState: text(row, "actual_state") as Project["actualState"],
@@ -457,6 +468,7 @@ export class PandamateStore {
       title: input.title,
       customDisplayName: null,
       kind: input.kind,
+      mergeMode: input.mergeMode ?? "manual",
       workspace: input.workspace,
       desiredState: "stopped",
       actualState: "registered",
@@ -486,11 +498,11 @@ export class PandamateStore {
       this.#database
         .prepare(
           `INSERT INTO projects(
-            id, slug, title, custom_display_name, kind, workspace,
+            id, slug, title, custom_display_name, kind, merge_mode, workspace,
             desired_state, actual_state, tmux_target, tmux_session_name,
             current_summary, attention_level, last_heartbeat_at, version,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           project.id,
@@ -498,6 +510,7 @@ export class PandamateStore {
           project.title,
           project.customDisplayName,
           project.kind,
+          project.mergeMode,
           project.workspace,
           project.desiredState,
           project.actualState,
@@ -532,6 +545,7 @@ export class PandamateStore {
             slug: project.slug,
             title: project.title,
             kind: project.kind,
+            mergeMode: project.mergeMode,
             workspace: project.workspace,
           }),
         );
@@ -1132,6 +1146,89 @@ export class PandamateStore {
         .run(
           idempotencyKey,
           "project.rename",
+          JSON.stringify(updated),
+          timestamp,
+        );
+      this.#database.exec("COMMIT");
+      return updated;
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  setProjectMergeMode(
+    rawSlug: string,
+    rawMergeMode: MergeMode,
+    rawIdempotencyKey: string,
+  ): Project {
+    const slug = validateProjectSlug(rawSlug);
+    const mergeMode = validateMergeMode(rawMergeMode);
+    const idempotencyKey = validateIdempotencyKey(rawIdempotencyKey);
+    const existing = this.#database
+      .prepare(
+        "SELECT response_json FROM command_results WHERE idempotency_key = ?",
+      )
+      .get(idempotencyKey) as SqlRow | undefined;
+    if (existing) {
+      return JSON.parse(text(existing, "response_json")) as Project;
+    }
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      const currentRow = this.#database
+        .prepare("SELECT * FROM projects WHERE slug = ?")
+        .get(slug) as SqlRow | undefined;
+      if (!currentRow) {
+        throw new Error(`Unknown project: ${slug}`);
+      }
+      const current = projectFromRow(currentRow);
+      if (current.kind !== "git" && mergeMode !== "manual") {
+        throw new Error("Automatic merge is available only for git projects");
+      }
+      const timestamp = this.#now().toISOString();
+      const updated: Project =
+        current.mergeMode === mergeMode
+          ? current
+          : {
+              ...current,
+              mergeMode,
+              version: current.version + 1,
+              updatedAt: timestamp,
+            };
+
+      if (updated !== current) {
+        this.#database
+          .prepare(
+            `UPDATE projects
+             SET merge_mode = ?, version = ?, updated_at = ?
+             WHERE id = ? AND version = ?`,
+          )
+          .run(
+            updated.mergeMode,
+            updated.version,
+            updated.updatedAt,
+            updated.id,
+            current.version,
+          );
+        this.#appendEvent(
+          "project.merge_mode.changed",
+          updated.id,
+          "cli",
+          "local-user",
+          { slug, from: current.mergeMode, to: updated.mergeMode },
+          timestamp,
+          idempotencyKey,
+        );
+      }
+      this.#database
+        .prepare(
+          `INSERT INTO command_results(
+            idempotency_key, command_type, response_json, created_at
+          ) VALUES (?, ?, ?, ?)`,
+        )
+        .run(
+          idempotencyKey,
+          "project.merge_mode.set",
           JSON.stringify(updated),
           timestamp,
         );

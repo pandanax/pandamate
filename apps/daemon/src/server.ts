@@ -208,6 +208,14 @@ function handleRequest(
           request.idempotencyKey,
         ),
       }));
+    case "project.merge_mode.set":
+      return response(request.requestId, () => ({
+        project: store.setProjectMergeMode(
+          request.payload.slug,
+          request.payload.mergeMode,
+          request.idempotencyKey,
+        ),
+      }));
     case "event.list": {
       return response(request.requestId, () => {
         const events = store.listEvents(

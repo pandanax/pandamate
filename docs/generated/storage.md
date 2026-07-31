@@ -4,7 +4,7 @@
 
 Sources: `packages/storage/src/index.ts`.
 
-Current schema migration: `8`.
+Current schema migration: `9`.
 
 | Version | Purpose |
 |---:|---|
@@ -16,3 +16,4 @@ Current schema migration: `8`.
 | 6 | Deduplicated hook receipts |
 | 7 | Durable decisions and supersession |
 | 8 | Custom project display names |
+| 9 | Project-owned automatic or manual merge mode |

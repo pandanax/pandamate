@@ -35,7 +35,10 @@ test("only the code profiles supervise workers", () => {
  * adapter without standing up a reconciliation pass; the prompt is the final
  * argv element.
  */
-function launchPromptForKind(kind: Project["kind"]): string {
+function launchPromptForKind(
+  kind: Project["kind"],
+  mergeMode: Project["mergeMode"] = "manual",
+): string {
   const directory = mkdtempSync(join(tmpdir(), "pandamate-prompt-"));
   try {
     const supervisor = new FirstMateSupervisor({
@@ -43,7 +46,11 @@ function launchPromptForKind(kind: Project["kind"]): string {
       store: new FakeStore([]),
       tmux: new FakeTmux(),
     });
-    const project = { ...fixtureProject(join(directory, "workspace")), kind };
+    const project = {
+      ...fixtureProject(join(directory, "workspace")),
+      kind,
+      mergeMode,
+    };
     const command = supervisor.launchCommand(project);
     return command[command.length - 1] ?? "";
   } finally {
@@ -67,7 +74,7 @@ test("DocResearch launches as a light research partner, not a FirstMate", () => 
   assert.match(prompt, /no crew, worktree, or pull-request machinery/);
   assert.match(prompt, /not pull requests/);
   // The code-isolation rule is for code-shipping FirstMates, not research.
-  assert.doesNotMatch(prompt, /a git FirstMate pushes its branch/);
+  assert.doesNotMatch(prompt, /merge mode is/);
   // Lifecycle framing is unchanged: identity header and the safety line stay.
   assert.match(prompt, /FIRSTMATE_OP: v1/);
   assert.match(prompt, /long-running main Claude Code process/);
@@ -84,10 +91,12 @@ test("Arc and Git keep the full FirstMate supervisor framing", () => {
     assert.match(prompt, /Supervise any workers you create/);
     // Code work is isolated on its own branch; landing is VCS-specific.
     assert.match(prompt, /its own isolated worktree/);
-    assert.match(prompt, /a git FirstMate pushes its branch/);
-    assert.match(prompt, /enables native auto-merge/);
-    assert.match(prompt, /instead of pushing the protected default branch/);
-    assert.match(prompt, /an arc FirstMate opens a PR/);
+    if (kind === "git") {
+      assert.match(prompt, /merge mode is manual/);
+      assert.match(prompt, /wait for the captain to merge/);
+    } else {
+      assert.match(prompt, /For arc, open a PR and watch CI/);
+    }
     assert.match(
       prompt,
       /FirstMate is this long-running main Claude Code process and role/,
@@ -98,6 +107,19 @@ test("Arc and Git keep the full FirstMate supervisor framing", () => {
     );
     assert.doesNotMatch(prompt, /research partner/);
   }
+});
+
+test("Git merge authority comes from the project", () => {
+  const automatic = launchPromptForKind("git", "auto");
+  assert.match(automatic, /merge mode is auto/);
+  assert.match(automatic, /enable the forge's native auto-merge/);
+  assert.match(automatic, /Do not push the protected default branch/);
+  assert.match(automatic, /Do not ask the captain to merge/);
+
+  const manual = launchPromptForKind("git", "manual");
+  assert.match(manual, /merge mode is manual/);
+  assert.match(manual, /wait for the captain to merge/);
+  assert.doesNotMatch(manual, /enable the forge's native auto-merge/);
 });
 
 interface FakeWindow {
@@ -284,6 +306,7 @@ function fixtureProject(workspace: string): Project {
     title: "Fixture",
     customDisplayName: null,
     kind: "arc",
+    mergeMode: "manual",
     workspace,
     desiredState: "running",
     actualState: "starting",

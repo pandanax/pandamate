@@ -5,6 +5,20 @@ set -eu
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
+nvm_script="${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+if [ -s "$nvm_script" ]; then
+  # Git hooks are non-interactive, so load nvm explicitly and honor .nvmrc.
+  # shellcheck disable=SC1090
+  . "$nvm_script"
+  nvm use --silent >/dev/null
+fi
+
+node_major=$(node -p 'process.versions.node.split(".")[0]')
+if [ "$node_major" != "26" ]; then
+  echo "Pandamate requires Node 26. Run 'nvm use' and retry the commit." >&2
+  exit 1
+fi
+
 echo "Generating code-derived documentation..."
 pnpm docs:generate
 

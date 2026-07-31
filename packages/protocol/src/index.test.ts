@@ -57,6 +57,34 @@ test("validates desired-state commands", () => {
   );
 });
 
+test("validates project-owned merge mode commands", () => {
+  assert.deepEqual(
+    parseRequest({
+      protocol: 1,
+      requestId: "req-merge-mode",
+      type: "project.merge_mode.set",
+      idempotencyKey: "test:merge:mode",
+      payload: { slug: "pandamate", mergeMode: "auto" },
+    }),
+    {
+      protocol: 1,
+      requestId: "req-merge-mode",
+      type: "project.merge_mode.set",
+      idempotencyKey: "test:merge:mode",
+      payload: { slug: "pandamate", mergeMode: "auto" },
+    },
+  );
+  assert.throws(() =>
+    parseRequest({
+      protocol: 1,
+      requestId: "req-merge-mode",
+      type: "project.merge_mode.set",
+      idempotencyKey: "test:merge:mode",
+      payload: { slug: "pandamate", mergeMode: "firstmate" },
+    }),
+  );
+});
+
 test("validates durable tmux adoption commands", () => {
   const request = parseRequest({
     protocol: 1,

@@ -296,6 +296,7 @@ The deterministic CLI currently supports:
 pnpm pandamate daemon start
 pnpm pandamate project add mandala Mandala git /absolute/workspace
 pnpm pandamate project create FirstMateGit /absolute/workspace
+pnpm pandamate project merge-mode <slug> auto
 pnpm pandamate project adopt mandala existing-tmux-session
 pnpm pandamate status
 pnpm pandamate start mandala

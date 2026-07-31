@@ -58,6 +58,7 @@ function usage(): never {
   pandamate memory check [--json]
   pandamate project add <slug> <title> <arc|git|docs> <absolute-workspace>
   pandamate project create <FirstMateArc|FirstMateGit|DocResearch> <absolute-workspace> [title]
+  pandamate project merge-mode <slug> <auto|manual> [--json]
   pandamate project adopt <slug> <tmux-session> [--json]
   pandamate project show <slug> [--json]
   pandamate events [--after <sequence>] [--limit <count>] [--json]
@@ -425,6 +426,27 @@ async function projectCommand(): Promise<void> {
       }),
     );
     output(project, formatProjects([project]));
+    return;
+  }
+  if (action === "merge-mode") {
+    const slug = args[2];
+    const mergeMode = args[3];
+    if (!slug || (mergeMode !== "auto" && mergeMode !== "manual")) {
+      usage();
+    }
+    const project = projectFrom(
+      await send({
+        protocol: protocolVersion,
+        requestId: requestId(),
+        type: "project.merge_mode.set",
+        idempotencyKey: `cli:${randomUUID()}`,
+        payload: { slug, mergeMode },
+      }),
+    );
+    output(
+      project,
+      `Set ${project.slug} merge mode to ${project.mergeMode}.\n`,
+    );
     return;
   }
   if (action === "adopt") {

@@ -23,6 +23,7 @@ Sources: `packages/protocol/src/index.ts`, `packages/domain/src/index.ts`, `spik
 - `project.tmux.adopt`
 - `project.restart`
 - `project.rename`
+- `project.merge_mode.set`
 - `event.list`
 - `message.create`
 - `message.list`
@@ -42,6 +43,7 @@ Sources: `packages/protocol/src/index.ts`, `packages/domain/src/index.ts`, `spik
 | Vocabulary | Values |
 |---|---|
 | Project kinds | `arc`, `git`, `docs` |
+| Project merge modes | `auto`, `manual` |
 | FirstMate profiles | `FirstMateArc`, `FirstMateGit`, `DocResearch` |
 | Desired states | `running`, `stopped` |
 | Actual states | `registered`, `starting`, `running`, `working`, `waiting`, `failed`, `recovering`, `sleeping`, `stopped` |

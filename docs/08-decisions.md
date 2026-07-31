@@ -346,19 +346,20 @@ changes must update this file and the affected specification.
   and does not carry this rule.
 - **Status:** accepted.
 
-### D-035 — Git changes land through required CI and native auto-merge
+### D-035 — Git changes land through required CI and project-owned merge mode
 
 - **Decision:** The git landing portion of D-033 is superseded. A git FirstMate
-  pushes an isolated branch, opens a PR or merge request, enables the forge's
-  native auto-merge, and watches the required checks. The protected default
-  branch rejects direct pushes. Panda's approval of this workflow is standing
-  merge authority for routine validated changes, so the FirstMate does not ask
-  again after CI turns green. Arc keeps its existing Arcanum path: open a PR,
-  watch CI, and leave the actual merge to the captain.
+  pushes an isolated branch, opens a PR or merge request, and watches the
+  required checks. Merge authority is the durable project's `mergeMode`, never
+  a property or preference of FirstMate: `auto` enables the forge's native
+  auto-merge; `manual` waits for Panda after CI. The protected default branch
+  rejects direct pushes in either mode. Arc keeps its existing Arcanum path:
+  open a PR, watch CI, and leave the actual merge to the captain.
 - **Local documentation gate:** Pandamate installs a tracked pre-commit hook from
-  `.githooks`. It runs `pnpm docs:generate`; when output changes, the commit stops
-  for review and explicit staging. CI independently runs `pnpm docs:check` from a
-  clean checkout, so generated drift cannot enter the protected branch.
+  `.githooks`. It loads the version pinned by `.nvmrc` with `nvm use`, then runs
+  `pnpm docs:generate`; when output changes, the commit stops for review and
+  explicit staging. CI independently runs `pnpm docs:check` from a clean
+  checkout, so generated drift cannot enter the protected branch.
 - **Reason:** Direct-to-main CI reports failure only after the broken revision is
   already the default branch. Required checks plus native auto-merge turn the
   same verification into a real admission gate. Generating locally removes the

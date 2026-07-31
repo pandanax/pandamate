@@ -10,6 +10,7 @@ import {
   validateIdempotencyKey,
   validateProjectSlug,
   validateCustomDisplayName,
+  validateMergeMode,
   type CreateProjectInput,
   type AdoptTmuxSessionInput,
   type EventRecord,
@@ -100,6 +101,16 @@ export type Request =
       readonly payload: {
         readonly slug: string;
         readonly customDisplayName: string | null;
+      };
+    }
+  | {
+      readonly protocol: 1;
+      readonly requestId: string;
+      readonly type: "project.merge_mode.set";
+      readonly idempotencyKey: string;
+      readonly payload: {
+        readonly slug: string;
+        readonly mergeMode: "auto" | "manual";
       };
     }
   | {
@@ -351,6 +362,17 @@ export function parseRequest(value: unknown): Request {
         payload: {
           slug: validateProjectSlug(payload.slug),
           customDisplayName: validateCustomDisplayName(payload.customDisplayName),
+        },
+      };
+    case "project.merge_mode.set":
+      return {
+        protocol: protocolVersion,
+        requestId,
+        type: input.type,
+        idempotencyKey: validateIdempotencyKey(input.idempotencyKey),
+        payload: {
+          slug: validateProjectSlug(payload.slug),
+          mergeMode: validateMergeMode(payload.mergeMode),
         },
       };
     case "event.list": {

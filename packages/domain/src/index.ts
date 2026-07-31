@@ -4,6 +4,9 @@ import { basename, isAbsolute, normalize } from "node:path";
 export const projectKinds = ["arc", "git", "docs"] as const;
 export type ProjectKind = (typeof projectKinds)[number];
 
+export const mergeModes = ["auto", "manual"] as const;
+export type MergeMode = (typeof mergeModes)[number];
+
 export const firstMateProfiles = [
   "FirstMateArc",
   "FirstMateGit",
@@ -38,6 +41,7 @@ export interface Project {
   readonly title: string;
   readonly customDisplayName: string | null;
   readonly kind: ProjectKind;
+  readonly mergeMode: MergeMode;
   readonly workspace: string;
   readonly desiredState: DesiredState;
   readonly actualState: ActualState;
@@ -55,6 +59,7 @@ export interface CreateProjectInput {
   readonly slug: string;
   readonly title: string;
   readonly kind: ProjectKind;
+  readonly mergeMode?: MergeMode;
   readonly workspace: string;
 }
 
@@ -477,12 +482,24 @@ export function validateCreateProjectInput(value: unknown): CreateProjectInput {
   if (!isProjectKind(input.kind)) {
     throw new Error("Project kind must be arc, git, or docs");
   }
+  const mergeMode = validateMergeMode(input.mergeMode ?? "manual");
+  if (input.kind !== "git" && mergeMode !== "manual") {
+    throw new Error("Automatic merge is available only for git projects");
+  }
   return {
     slug: validateProjectSlug(input.slug),
     title: validateProjectTitle(input.title),
     kind: input.kind,
+    mergeMode,
     workspace: validateWorkspace(input.workspace),
   };
+}
+
+export function validateMergeMode(value: unknown): MergeMode {
+  if (value !== "auto" && value !== "manual") {
+    throw new Error("Project merge mode must be auto or manual");
+  }
+  return value;
 }
 
 export function projectKindForProfile(
@@ -561,6 +578,7 @@ export function buildProjectOnboarding(
       slug: deriveProjectSlug(workspace),
       title: validateProjectTitle(rawTitle ?? fallbackTitle),
       kind: projectKindForProfile(profile),
+      mergeMode: "manual",
       workspace,
     },
   };
