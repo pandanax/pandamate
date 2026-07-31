@@ -45,6 +45,7 @@ type SqlRow = Record<string, string | number | bigint | Uint8Array | null>;
 const migrations = [
   {
     version: 1,
+    description: "Initial projects, events, and idempotent command results",
     sql: `
       CREATE TABLE projects (
         id TEXT PRIMARY KEY,
@@ -91,6 +92,7 @@ const migrations = [
   },
   {
     version: 3,
+    description: "Unique tmux target ownership",
     sql: `
       CREATE UNIQUE INDEX projects_unique_tmux_target
         ON projects(tmux_target)
@@ -99,6 +101,7 @@ const migrations = [
   },
   {
     version: 2,
+    description: "Durable tmux session names",
     sql: `
       ALTER TABLE projects ADD COLUMN tmux_session_name TEXT;
       CREATE UNIQUE INDEX projects_tmux_session_name_unique
@@ -108,6 +111,7 @@ const migrations = [
   },
   {
     version: 4,
+    description: "Mailbox, FirstMate status, and checkpoints",
     sql: `
       CREATE TABLE messages (
         id TEXT PRIMARY KEY,
@@ -150,6 +154,7 @@ const migrations = [
   },
   {
     version: 5,
+    description: "Durable one-shot timers",
     sql: `
       CREATE TABLE timers (
         id TEXT PRIMARY KEY,
@@ -167,6 +172,7 @@ const migrations = [
   },
   {
     version: 6,
+    description: "Deduplicated hook receipts",
     sql: `
       CREATE TABLE hook_receipts (
         hook_id TEXT PRIMARY KEY,
@@ -177,6 +183,7 @@ const migrations = [
   },
   {
     version: 7,
+    description: "Durable decisions and supersession",
     sql: `
       CREATE TABLE decisions (
         id TEXT PRIMARY KEY,
@@ -196,6 +203,7 @@ const migrations = [
   },
   {
     version: 8,
+    description: "Custom project display names",
     sql: `
       ALTER TABLE projects ADD COLUMN custom_display_name TEXT;
     `,

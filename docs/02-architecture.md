@@ -51,24 +51,8 @@ The daemon must remain useful when Claude authentication or the network is down.
 
 The current deterministic CLI has subcommands; the Desktop launcher/
 `spike:tui:discovered` is still the TUI entry point rather than a no-argument
-CLI mode:
-
-```text
-pandamate start <project>
-pandamate stop <project>
-pandamate open <project>
-pandamate send <project> <text>
-pandamate inbox list|lease|ack|apply|resolve|fail ...
-pandamate timer add|list ...
-pandamate memory set|list|check ...
-pandamate project create|add|adopt|show ...
-pandamate close-tab <project>
-pandamate shutdown-all
-pandamate status [--json]
-pandamate event               # hook JSON on stdin
-pandamate doctor
-pandamate daemon start|stop|status
-```
+CLI mode. The exact command surface is generated from the implementation in
+[the CLI reference](generated/cli.md).
 
 Commands are clients of the daemon. They do not edit SQLite directly.
 

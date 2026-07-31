@@ -9,9 +9,14 @@ authoritative state.
 Only the daemon mutates operational state. Every mutation is a transaction that
 includes its audit event.
 
-This document distinguishes the schema implemented in migration version 8 from
-target extensions. Unmarked fields and transitions below describe the current
+This document distinguishes the currently implemented schema from target
+extensions. Unmarked fields and transitions below describe the current
 implementation as of 2026-07-31.
+
+The exact migration sequence and current version are generated from storage
+code in the [storage reference](generated/storage.md). IPC request names and
+bounded domain vocabularies are generated in the
+[protocol reference](generated/protocol.md).
 
 ## 2. Core entities
 

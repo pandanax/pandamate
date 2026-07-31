@@ -224,8 +224,10 @@ isolated `tmux -L` servers and fake fixtures for development tests.
 4. [Implementation roadmap](docs/06-implementation-roadmap.md) for phase scope.
 5. [State and protocols](docs/03-state-and-protocols.md) for current contracts
    and explicitly marked target extensions.
-6. [Architecture decisions](docs/08-decisions.md) for accepted behavior.
-7. [Testing and acceptance](docs/07-testing-and-acceptance.md) before handoff.
+6. [Generated reference](docs/generated/README.md) for code-derived CLI,
+   protocol, storage, and workspace inventories.
+7. [Architecture decisions](docs/08-decisions.md) for accepted behavior.
+8. [Testing and acceptance](docs/07-testing-and-acceptance.md) before handoff.
 
 ## Development
 
@@ -235,8 +237,8 @@ The toolchain is pinned by `.nvmrc` and the pnpm lockfile. Always enter it with
 ```bash
 nvm use
 pnpm install --registry=https://registry.npmjs.org
-pnpm check
-pnpm test
+pnpm verify
+pnpm docs:generate
 pnpm pandamate daemon start
 pnpm pandamate status
 pnpm pandamate events
@@ -254,6 +256,10 @@ Node. If the configured Yandex npm registry stalls or lacks a tarball, use
 `spike:tui` uses Node's experimental FFI support. Socket integration tests need
 permission to create temporary local Unix sockets. `spike:tmux` uses a private
 tmux server and does not touch normal tmux sessions.
+
+`pnpm docs:generate` refreshes the files under `docs/generated/` from code.
+`pnpm docs:check`, which is part of `pnpm check` and CI, fails without changing
+files when a generated reference is stale.
 
 The Unix socket path is capped at 100 bytes. On harnesses whose system `TMPDIR`
 is already long, temporary test directories can make two supervisor tests fail
@@ -310,22 +316,16 @@ both locations and never write live state into this synchronized checkout.
 
 ## Repository map
 
+The exact workspace package, binary, script, and dependency inventory is
+generated from the manifests in the
+[workspace reference](docs/generated/workspace.md). The remaining non-workspace
+surfaces are:
+
 ```text
-apps/cli                 deterministic user-facing CLI
-apps/daemon              single-writer daemon and Unix-socket server
-packages/client          bounded local protocol client
-packages/config          state/runtime path validation
-packages/domain          project/event contracts and validation
-packages/protocol        versioned request/response frames
-packages/storage         SQLite migrations, projections, and event log
-packages/runtime-tmux    validated tmux discovery, lifecycle, Home tabs, iTerm fallback
-packages/firstmate-kit   mailbox/status/checkpoint client, hook spool, workspace evidence
-packages/memory          deterministic MEMORY.md materialization and drift check
-packages/agent-sdk       bounded resumable Claude brain adapter
-spikes/tmux              real tmux, navigation, TUI, and idle smokes
-spikes/tui               current OpenTUI control deck
 tools/macos              personal launcher bundle, deploy and drift check
 docs                     product specification and evidence logs
+assets                   launcher artwork
+scripts/docs             generated-reference tooling
 ```
 
 ## Specification index

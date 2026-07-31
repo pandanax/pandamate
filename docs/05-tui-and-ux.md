@@ -54,6 +54,8 @@ Current implementation status (2026-07-31): Home, Pandamate Services, Project,
 Event Journal, Write to Pandamate, project rename, lifecycle confirmations, and
 full-shutdown progress are live. Conversation, Memory, Sessions, Diagnostics,
 the command palette, and per-project filtered timeline are target screens.
+The code-derived action and internal screen-state inventory lives in the
+[generated protocol reference](generated/protocol.md#tui-control-protocol).
 
 ### Home
 

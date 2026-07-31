@@ -2,14 +2,18 @@
   "name": "pandamate",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "description": "Local durable control plane for FirstMate orchestrators",
   "packageManager": "pnpm@8.15.8",
   "engines": {
     "node": ">=26.5.0 <27"
   },
   "scripts": {
-    "check": "pnpm -r check",
+    "check": "pnpm -r check && pnpm docs:check",
     "test": "pnpm -r test",
+    "verify": "pnpm check && pnpm test",
+    "docs:generate": "node scripts/docs/generate.ts",
+    "docs:check": "tsc -p scripts/docs/tsconfig.json && node scripts/docs/generate.ts --check",
     "pandamate": "pnpm --filter @pandamate/cli start --",
     "daemon": "pnpm --filter @pandamate/daemon start",
     "spike:tui": "pnpm --filter @pandamate/spike-tui start",
