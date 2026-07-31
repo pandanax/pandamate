@@ -346,6 +346,26 @@ changes must update this file and the affected specification.
   and does not carry this rule.
 - **Status:** accepted.
 
+### D-035 — Git changes land through required CI and native auto-merge
+
+- **Decision:** The git landing portion of D-033 is superseded. A git FirstMate
+  pushes an isolated branch, opens a PR or merge request, enables the forge's
+  native auto-merge, and watches the required checks. The protected default
+  branch rejects direct pushes. Panda's approval of this workflow is standing
+  merge authority for routine validated changes, so the FirstMate does not ask
+  again after CI turns green. Arc keeps its existing Arcanum path: open a PR,
+  watch CI, and leave the actual merge to the captain.
+- **Local documentation gate:** Pandamate installs a tracked pre-commit hook from
+  `.githooks`. It runs `pnpm docs:generate`; when output changes, the commit stops
+  for review and explicit staging. CI independently runs `pnpm docs:check` from a
+  clean checkout, so generated drift cannot enter the protected branch.
+- **Reason:** Direct-to-main CI reports failure only after the broken revision is
+  already the default branch. Required checks plus native auto-merge turn the
+  same verification into a real admission gate. Generating locally removes the
+  easy-to-forget manual step without silently adding files to a commit.
+- **Status:** accepted by Panda on 2026-08-01; implemented for Pandamate beginning
+  with the PR that introduced this decision.
+
 ### D-034 — Registered FirstMates open as tabs of Pandamate Home
 
 - **Decision:** Opening a registered running project links window `0` of its

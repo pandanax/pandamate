@@ -67,7 +67,7 @@ test("DocResearch launches as a light research partner, not a FirstMate", () => 
   assert.match(prompt, /no crew, worktree, or pull-request machinery/);
   assert.match(prompt, /not pull requests/);
   // The code-isolation rule is for code-shipping FirstMates, not research.
-  assert.doesNotMatch(prompt, /a git FirstMate pushes to main/);
+  assert.doesNotMatch(prompt, /a git FirstMate pushes its branch/);
   // Lifecycle framing is unchanged: identity header and the safety line stay.
   assert.match(prompt, /FIRSTMATE_OP: v1/);
   assert.match(prompt, /long-running main Claude Code process/);
@@ -84,7 +84,9 @@ test("Arc and Git keep the full FirstMate supervisor framing", () => {
     assert.match(prompt, /Supervise any workers you create/);
     // Code work is isolated on its own branch; landing is VCS-specific.
     assert.match(prompt, /its own isolated worktree/);
-    assert.match(prompt, /a git FirstMate pushes to main/);
+    assert.match(prompt, /a git FirstMate pushes its branch/);
+    assert.match(prompt, /enables native auto-merge/);
+    assert.match(prompt, /instead of pushing the protected default branch/);
     assert.match(prompt, /an arc FirstMate opens a PR/);
     assert.match(
       prompt,

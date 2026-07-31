@@ -18,15 +18,24 @@ dispatching a worker into that worktree over doing code in your own session
 
 **Landing is the home's call, and it differs by VCS:**
 
-- **git** — push to `main` directly (and deploy per the project's settings). Once
-  Panda has allowed pushing to main, a git FirstMate pushes **without asking
-  again**.
+- **git** — push an isolated branch, open a PR, enable the forge's native
+  auto-merge, and watch required CI. The protected default branch accepts the
+  change only after those checks pass; do not push it directly. Panda's standing
+  approval covers routine auto-merge through this gate, so do not ask again.
 - **arc** — open a PR and watch CI; never merge or deploy (the captain merges).
 - When the landing mode is genuinely unclear for a change, **ask «push or PR?»**
   rather than guessing.
 
 The concrete per-VCS mechanics live in each FirstMate's own home;
 [docs/19](19-firstmate-responsibilities.md) indexes them.
+
+## Generated documentation before commit
+
+This repository installs `.githooks/pre-commit` through the root `prepare`
+script. The hook runs `pnpm docs:generate` on every commit. If generation changes
+anything under `docs/generated`, the commit stops so the author can review and
+stage the result before retrying. It never stages files silently. CI then runs
+`pnpm docs:check` as the independent clean-checkout gate.
 
 ## Don't clobber a shared working tree
 

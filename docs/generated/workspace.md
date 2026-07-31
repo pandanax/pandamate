@@ -10,9 +10,10 @@ Sources: `package.json`, `pnpm-workspace.yaml`, `apps/*/package.json`, `packages
 |---|---|
 | `pnpm check` | `pnpm -r check && pnpm docs:check` |
 | `pnpm daemon` | `pnpm --filter @pandamate/daemon start` |
-| `pnpm docs:check` | `tsc -p scripts/docs/tsconfig.json && node scripts/docs/generate.ts --check` |
-| `pnpm docs:generate` | `node scripts/docs/generate.ts` |
+| `pnpm docs:check` | `tsc -p scripts/docs/tsconfig.json && node --experimental-strip-types scripts/docs/generate.ts --check` |
+| `pnpm docs:generate` | `node --experimental-strip-types scripts/docs/generate.ts` |
 | `pnpm pandamate` | `pnpm --filter @pandamate/cli start --` |
+| `pnpm prepare` | `node scripts/install-git-hooks.mjs` |
 | `pnpm spike:tmux` | `pnpm --filter @pandamate/spike-tmux smoke` |
 | `pnpm spike:tmux:navigation` | `pnpm --filter @pandamate/spike-tmux smoke:navigation` |
 | `pnpm spike:tmux:tui` | `pnpm --filter @pandamate/spike-tmux smoke:tui` |

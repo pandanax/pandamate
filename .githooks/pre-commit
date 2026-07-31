@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+echo "Generating code-derived documentation..."
+pnpm docs:generate
+
+if ! git diff --quiet -- docs/generated; then
+  echo >&2
+  echo "Generated documentation changed and was not staged." >&2
+  echo "Review it, run 'git add docs/generated', and commit again." >&2
+  exit 1
+fi
+
+untracked=$(git ls-files --others --exclude-standard -- docs/generated)
+if [ -n "$untracked" ]; then
+  echo >&2
+  echo "Generated documentation contains untracked files:" >&2
+  echo "$untracked" >&2
+  echo "Review them, run 'git add docs/generated', and commit again." >&2
+  exit 1
+fi

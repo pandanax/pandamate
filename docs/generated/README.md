@@ -19,6 +19,11 @@ pnpm docs:generate
 committed files differ. It never rewrites the working tree. The root
 `pnpm check` and CI both include this drift check.
 
+The repository's pre-commit hook runs `pnpm docs:generate` automatically. If
+that changes generated files, the commit stops so the result can be reviewed and
+staged; the hook never stages generated output silently. `pnpm install` installs
+the tracked hook through the root `prepare` script.
+
 Narrative documents remain reviewed, human-readable design records. Phase
 status, rationale, acceptance interpretation, and future intent are outside the
 generated layer.
