@@ -7,8 +7,8 @@ from [README.md](README.md) for product state and the current handoff;
 ## How to operate here (read before acting)
 
 Common operating rules for every FirstMate — **code tasks are isolated in a
-worktree; landing follows durable project merge mode (git → PR + required CI,
-then auto or manual merge; arc → PR + CI)**, don't clobber
+worktree; project kind and merge mode are durable inputs to the selected
+FirstMate protocol**, don't clobber
 the shared working tree, how to reach/restart
 the real daemon, and the standing firstmate/gnhf mandate — live in
 [docs/18-agent-operations.md](docs/18-agent-operations.md). That is the canonical,

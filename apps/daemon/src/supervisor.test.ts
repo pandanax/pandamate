@@ -35,10 +35,10 @@ test("only the code profiles supervise workers", () => {
  * adapter without standing up a reconciliation pass; the prompt is the final
  * argv element.
  */
-function launchPromptForKind(
+function launchCommandForKind(
   kind: Project["kind"],
   mergeMode: Project["mergeMode"] = "manual",
-): string {
+): readonly string[] {
   const directory = mkdtempSync(join(tmpdir(), "pandamate-prompt-"));
   try {
     const supervisor = new FirstMateSupervisor({
@@ -51,11 +51,17 @@ function launchPromptForKind(
       kind,
       mergeMode,
     };
-    const command = supervisor.launchCommand(project);
-    return command[command.length - 1] ?? "";
+    return supervisor.launchCommand(project);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+}
+
+function launchPromptForKind(
+  kind: Project["kind"],
+  mergeMode: Project["mergeMode"] = "manual",
+): string {
+  return launchCommandForKind(kind, mergeMode).at(-1) ?? "";
 }
 
 test("DocResearch launches as a light research partner, not a FirstMate", () => {
@@ -91,12 +97,7 @@ test("Arc and Git keep the full FirstMate supervisor framing", () => {
     assert.match(prompt, /Supervise any workers you create/);
     // Code work is isolated on its own branch; landing is VCS-specific.
     assert.match(prompt, /its own isolated worktree/);
-    if (kind === "git") {
-      assert.match(prompt, /merge mode is manual/);
-      assert.match(prompt, /wait for the captain to merge/);
-    } else {
-      assert.match(prompt, /For arc, open a PR and watch CI/);
-    }
+    assert.match(prompt, /apply the selected FirstMate protocol/i);
     assert.match(
       prompt,
       /FirstMate is this long-running main Claude Code process and role/,
@@ -110,16 +111,20 @@ test("Arc and Git keep the full FirstMate supervisor framing", () => {
 });
 
 test("Git merge authority comes from the project", () => {
-  const automatic = launchPromptForKind("git", "auto");
-  assert.match(automatic, /merge mode is auto/);
-  assert.match(automatic, /enable the forge's native auto-merge/);
-  assert.match(automatic, /Do not push the protected default branch/);
-  assert.match(automatic, /Do not ask the captain to merge/);
+  const automatic = launchCommandForKind("git", "auto");
+  assert.ok(automatic.includes("PANDAMATE_PROJECT_KIND=git"));
+  assert.ok(automatic.includes("PANDAMATE_MERGE_MODE=auto"));
+  assert.match(automatic.at(-1) ?? "", /kind=git and mergeMode=auto/);
 
-  const manual = launchPromptForKind("git", "manual");
-  assert.match(manual, /merge mode is manual/);
-  assert.match(manual, /wait for the captain to merge/);
-  assert.doesNotMatch(manual, /enable the forge's native auto-merge/);
+  const manual = launchCommandForKind("git", "manual");
+  assert.ok(manual.includes("PANDAMATE_PROJECT_KIND=git"));
+  assert.ok(manual.includes("PANDAMATE_MERGE_MODE=manual"));
+  assert.match(manual.at(-1) ?? "", /kind=git and mergeMode=manual/);
+
+  for (const prompt of [automatic.at(-1) ?? "", manual.at(-1) ?? ""]) {
+    assert.doesNotMatch(prompt, /native auto-merge/);
+    assert.doesNotMatch(prompt, /wait for the captain to merge/);
+  }
 });
 
 interface FakeWindow {
