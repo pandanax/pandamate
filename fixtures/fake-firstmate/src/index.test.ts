@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -42,7 +43,7 @@ test("parses bounded fake FirstMate options", () => {
 });
 
 test("writes atomic heartbeats and applies deterministic controls", () => {
-  const directory = mkdtempSync("/private/tmp/fake-firstmate-");
+  const directory = mkdtempSync(join(tmpdir(), "fake-firstmate-"));
   const heartbeatPath = join(directory, "heartbeat.json");
   const controlPath = join(directory, "control");
   try {

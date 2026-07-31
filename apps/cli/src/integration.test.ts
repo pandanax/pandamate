@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile as execFileCallback, spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
@@ -34,7 +35,7 @@ async function waitForExit(child: ChildProcess): Promise<void> {
 }
 
 test("CLI shows identical projects and event journal after daemon restart", async () => {
-  const directory = mkdtempSync("/private/tmp/pandamate-cli-");
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-cli-"));
   const tmuxSocketName = `pandamate-cli-test-${process.pid}`;
   const tmux = new TmuxClient({ socketName: tmuxSocketName });
   const onboardingWorkspace = join(directory, "new-site");
@@ -190,7 +191,7 @@ test("CLI shows identical projects and event journal after daemon restart", asyn
 });
 
 test("shutdown-all closes a FirstMate gracefully, stops the daemon, and stays closed", async () => {
-  const directory = mkdtempSync("/private/tmp/pandamate-shutdown-");
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-shutdown-"));
   const tmuxSocketName = `pandamate-shutdown-test-${process.pid}`;
   const tmux = new TmuxClient({ socketName: tmuxSocketName });
   const fakeEntry = new URL(

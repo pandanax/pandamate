@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -88,7 +89,7 @@ async function stopDaemon(
 }
 
 test("daemon restart preserves three projects and identical event history", async () => {
-  const directory = mkdtempSync("/private/tmp/pandamate-daemon-");
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-daemon-"));
   const environment = {
     ...process.env,
     PANDAMATE_STATE_DIR: join(directory, "state"),
@@ -277,7 +278,7 @@ async function waitForProjects(
 }
 
 test("supervisor starts, stops, and recovers fake FirstMates on isolated tmux", async () => {
-  const directory = mkdtempSync("/private/tmp/pandamate-supervisor-");
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-supervisor-"));
   const workspaceAlpha = join(directory, "alpha");
   const workspaceBeta = join(directory, "beta");
   mkdirSync(workspaceAlpha);

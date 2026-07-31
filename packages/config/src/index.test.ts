@@ -1,28 +1,34 @@
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { loadConfig } from "./index.ts";
 
 test("derives bounded state and runtime files from overrides", () => {
+  const stateDirectory = join(tmpdir(), "pandamate-test-state");
+  const runtimeDirectory = join(tmpdir(), "pandamate-test-runtime");
+  const claudeExecutable = join(tmpdir(), "pandamate-test-claude");
   assert.deepEqual(
     loadConfig({
-      PANDAMATE_STATE_DIR: "/private/tmp/pandamate-test-state",
-      PANDAMATE_RUNTIME_DIR: "/private/tmp/pandamate-test-runtime",
+      PANDAMATE_STATE_DIR: stateDirectory,
+      PANDAMATE_RUNTIME_DIR: runtimeDirectory,
+      PANDAMATE_CLAUDE_EXECUTABLE: claudeExecutable,
     }),
     {
-      stateDirectory: "/private/tmp/pandamate-test-state",
-      runtimeDirectory: "/private/tmp/pandamate-test-runtime",
-      databasePath: "/private/tmp/pandamate-test-state/state.sqlite3",
-      socketPath: "/private/tmp/pandamate-test-runtime/pandamated.sock",
-      lockPath: "/private/tmp/pandamate-test-runtime/pandamated.lock",
-      logPath: "/private/tmp/pandamate-test-state/pandamated.jsonl",
-      heartbeatDirectory: "/private/tmp/pandamate-test-state/heartbeats",
-      hookSpoolDirectory: "/private/tmp/pandamate-test-state/hook-spool",
-      memoryDirectory: "/private/tmp/pandamate-test-state/memory",
-      backupsDirectory: "/private/tmp/pandamate-test-state/backups",
+      stateDirectory,
+      runtimeDirectory,
+      databasePath: join(stateDirectory, "state.sqlite3"),
+      socketPath: join(runtimeDirectory, "pandamated.sock"),
+      lockPath: join(runtimeDirectory, "pandamated.lock"),
+      logPath: join(stateDirectory, "pandamated.jsonl"),
+      heartbeatDirectory: join(stateDirectory, "heartbeats"),
+      hookSpoolDirectory: join(stateDirectory, "hook-spool"),
+      memoryDirectory: join(stateDirectory, "memory"),
+      backupsDirectory: join(stateDirectory, "backups"),
       tmuxSocketName: undefined,
       firstMateAdapter: "claude-code",
-      claudeExecutable: "/Users/pandanax/.local/bin/claude",
+      claudeExecutable,
       firstMateHome: undefined,
       fakeFirstMateEntry: undefined,
       reconcileIntervalMs: 500,
@@ -34,40 +40,45 @@ test("derives bounded state and runtime files from overrides", () => {
 });
 
 test("accepts an absolute firstmate home and rejects a relative one", () => {
+  const stateDirectory = join(tmpdir(), "state");
+  const runtimeDirectory = join(tmpdir(), "runtime");
+  const firstMateHome = join(tmpdir(), "arcadia/junk/pandanax/firstmate");
   assert.equal(
     loadConfig({
-      PANDAMATE_STATE_DIR: "/private/tmp/state",
-      PANDAMATE_RUNTIME_DIR: "/private/tmp/runtime",
-      PANDAMATE_FIRSTMATE_HOME: "/private/tmp/arcadia/junk/pandanax/firstmate",
+      PANDAMATE_STATE_DIR: stateDirectory,
+      PANDAMATE_RUNTIME_DIR: runtimeDirectory,
+      PANDAMATE_FIRSTMATE_HOME: firstMateHome,
     }).firstMateHome,
-    "/private/tmp/arcadia/junk/pandanax/firstmate",
+    firstMateHome,
   );
   assert.throws(() =>
     loadConfig({
-      PANDAMATE_STATE_DIR: "/private/tmp/state",
-      PANDAMATE_RUNTIME_DIR: "/private/tmp/runtime",
+      PANDAMATE_STATE_DIR: stateDirectory,
+      PANDAMATE_RUNTIME_DIR: runtimeDirectory,
       PANDAMATE_FIRSTMATE_HOME: "relative/firstmate",
     }),
   );
 });
 
 test("rejects relative and oversized socket paths", () => {
+  const stateDirectory = join(tmpdir(), "state");
+  const runtimeDirectory = join(tmpdir(), "runtime");
   assert.throws(() =>
     loadConfig({
       PANDAMATE_STATE_DIR: "relative",
-      PANDAMATE_RUNTIME_DIR: "/private/tmp/runtime",
+      PANDAMATE_RUNTIME_DIR: runtimeDirectory,
     }),
   );
   assert.throws(() =>
     loadConfig({
-      PANDAMATE_STATE_DIR: "/private/tmp/state",
-      PANDAMATE_RUNTIME_DIR: `/private/tmp/${"x".repeat(100)}`,
+      PANDAMATE_STATE_DIR: stateDirectory,
+      PANDAMATE_RUNTIME_DIR: join(tmpdir(), "x".repeat(100)),
     }),
   );
   assert.throws(() =>
     loadConfig({
-      PANDAMATE_STATE_DIR: "/private/tmp/state",
-      PANDAMATE_RUNTIME_DIR: "/private/tmp/runtime",
+      PANDAMATE_STATE_DIR: stateDirectory,
+      PANDAMATE_RUNTIME_DIR: runtimeDirectory,
       PANDAMATE_TMUX_SOCKET_NAME: "../default",
     }),
   );
