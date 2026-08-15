@@ -12,7 +12,7 @@ MVP assumptions:
 - no remote clients;
 - FirstMate project content may be untrusted;
 - model output and hook payloads are untrusted input;
-- Arc, Git, and Docs adapters have different allowed capabilities.
+- Git and Docs profiles have different allowed capabilities.
 
 ## 2. Required controls
 

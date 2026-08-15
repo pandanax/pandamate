@@ -24,12 +24,12 @@ Visual direction: **Panda Control Deck**.
 ├──────────────────────────┬──────────────────────────────────┤
 │ FLEET                    │ SELECTED: MANDALA                │
 │ ● Mandala        working │ Fixing mobile authentication    │
-│ ◉ ARC-1234       waiting │ ◌ ─ ◉ ─ ◌   iteration 18        │
+│ ◉ GIT-1234       waiting │ ◌ ─ ◉ ─ ◌   iteration 18        │
 │ ◌ Legal          sleeping│ ███████████░░░  78%              │
 │ ○ Personal site  stopped │ heartbeat 4s ago                 │
 ├──────────────────────────┼──────────────────────────────────┤
 │ LIVE ACTIVITY            │ ATTENTION                        │
-│ 14:41 tests completed    │ ARC-1234 needs a decision       │
+│ 14:41 tests completed    │ GIT-1234 needs a decision       │
 │ 14:40 instruction routed │ [Review] [Open FirstMate]       │
 ├──────────────────────────┴──────────────────────────────────┤
 │ › ask Pandamate anything…                                  │
@@ -137,13 +137,13 @@ its absolute path. The first deterministic skill is project onboarding:
 
 ```text
 Создай проект FirstMateGit "/absolute/path"
-Подними /absolute/arcadia/path как FirstMateArc
+Подними /absolute/git/path как FirstMateGit
 Создай DocResearch "/absolute/research/path"
 ```
 
 Enter submits; Esc cancels. A path-only submission is accepted when
-`.claude/settings.json` contains a FirstMate marker and the workspace has an
-unambiguous Arcadia or Git repository marker. A submitted `.claude` directory
+`.codex/config.toml` or `AGENTS.md` contains a FirstMate marker and the workspace has an
+unambiguous Git repository marker. A submitted `.codex` directory
 is normalized to its parent workspace. Otherwise the profile must be named
 explicitly. Registered Fleet rows and project details show the resolved public
 profile; unadopted tmux candidates remain visibly unclassified.
@@ -204,7 +204,7 @@ that item can actually perform now, so a stopped FirstMate offers `s` and never
 Graceful shutdown and immediate stopping each open a separate confirmation
 surface naming the exact target. Graceful shutdown asks the FirstMate to
 checkpoint, dismiss its workers, close project resources and connections,
-safely unmount Arcadia when applicable, and close its own tmux session last.
+stop project-owned processes and close its own tmux session last.
 The Fleet item remains as an inactive FirstMate after that runtime disappears;
 Fleet identity is durable project state, not a projection containing only live
 tmux sessions. Reset has its own confirmation and combines graceful crew
@@ -229,7 +229,7 @@ language:
 
 ```text
 Open Mandala
-Message ARC-1234
+Message GIT-1234
 Restart Legal
 Show projects needing attention
 Summarize today

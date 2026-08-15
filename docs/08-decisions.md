@@ -66,8 +66,8 @@ changes must update this file and the affected specification.
 
 ### D-011 — Initial FirstMate profiles
 
-- **Decision:** Initial profiles are FirstMateArc, FirstMateGit, and
-  FirstMateDocs.
+- **Decision:** Initial profiles were superseded; current profiles are
+  FirstMateGit and DocResearch.
 - **Status:** accepted historically; public Docs naming was superseded by
   D-022's `DocResearch` name while retaining `FirstMateDocs` as an input alias.
 
@@ -114,7 +114,7 @@ changes must update this file and the affected specification.
   the active pane in window `0` of the selected FirstMate session, types one
   bounded shutdown instruction there, and presses Enter. The FirstMate owns
   checkpointing, dismissing workers, closing connections and project
-  resources, safely unmounting Arcadia when applicable, and closing its own
+  resources, stopping project-owned processes, and closing its own
   tmux session as the final step. Immediate `x` kill remains a distinct,
   separately confirmed fallback.
 - **Status:** accepted.
@@ -144,10 +144,10 @@ changes must update this file and the affected specification.
 
 - **Decision:** `i` opens Pandamate input. A request containing one absolute
   folder and one explicit profile creates and starts a durable project.
-  Public profiles are `FirstMateArc`, `FirstMateGit`, and `DocResearch`;
+  Public profiles are `FirstMateGit` and `DocResearch`;
   `FirstMateDocs` remains an accepted compatibility alias for `DocResearch`.
-  The daemon still persists the stable core kinds `arc`, `git`, and `docs`.
-  A launched FirstMate is the main Claude Code process in the project workspace
+  The daemon persists the stable core kinds `git` and `docs`.
+  A launched FirstMate is the main coding-agent process in the project workspace
   and `firstmate-<slug>` tmux session, not a separate hidden executable.
 - **Status:** accepted.
 
@@ -173,8 +173,8 @@ changes must update this file and the affected specification.
 ### D-025 — Deterministic FirstMate discovery and visible Fleet profiles
 
 - **Decision:** A path-only onboarding request may infer a profile only from
-  bounded local evidence: a FirstMate marker in `.claude/settings.json` plus an
-  unambiguous Arcadia or Git repository marker. A `.claude` path resolves to its
+  bounded local evidence: a FirstMate marker in agent configuration plus an
+  unambiguous Git repository marker. Agent-configuration paths resolve to their
   parent workspace. Durable Fleet projects display the resulting public
   profile; raw tmux candidates remain unclassified until registration or
   adoption establishes their identity.
@@ -254,8 +254,8 @@ changes must update this file and the affected specification.
 ### D-030 — DocResearch launches as a light research partner, not a FirstMate
 
 - **Decision:** The launch prompt is profile-aware. `firstMateProfileForProject`
-  now also returns `supervises` — `true` for the code profiles (`FirstMateArc`,
-  `FirstMateGit`), `false` for `DocResearch` — and `launchCommand` frames the
+  now also returns `supervises` - `true` for `FirstMateGit` and `false` for
+  `DocResearch` - and `launchCommand` frames the
   role from it. Supervising profiles keep their exact wording: "the main
   FirstMate", their per-kind instructions, and the tail that tells them to own
   durable state, supervise workers, and report checkpoints. DocResearch instead
@@ -280,67 +280,19 @@ changes must update this file and the affected specification.
   supervision are untouched.
 - **Status:** accepted.
 
-### D-031 — An arc FirstMate resolves its Watcher from its firstmate home, derived from the arc root
-
-- **Decision:** Watcher resolution ([D-028](#d-028--the-watcher-is-deployed-by-the-control-plane-not-by-the-firstmate))
-  searches the workspace first and, only if the workspace declares none, the arc
-  FirstMate's firstmate home. An arc FirstMate's workspace is product code (e.g.
-  monomarket at `~/arcadia/market/front/monomarket`) that carries no watcher of
-  its own; its `fm-watch` lives in the arc FirstMate's separate crew-tooling home
-  (`~/arcadia/junk/pandanax/firstmate/bin/fm-watch`), entirely outside the
-  workspace, so the pure workspace-relative lookup returned `null` and the
-  `watch` window was never deployed — nothing reaped finished crew worktrees.
-  That home is now **known without configuration**: `arcFirstMateHome(workspace)`
-  walks up to the workspace's `.arc` mount root and returns
-  `<arcRoot>/junk/pandanax/firstmate`, so the fix works wherever arcadia is
-  mounted with no env to set. `workspaceWatcherCommand` takes optional
-  `fallbackRoots`, and the supervisor passes the derived home as one fallback
-  root **only for `kind: "arc"` projects**. `PANDAMATE_FIRSTMATE_HOME` remains an
-  optional override that takes precedence, for when the topology moves. The same
-  three candidates (`.pandamate/watch`, `firstmate/bin/fm-watch`, `bin/fm-watch`)
-  and the same executable-regular-file and shell-safe-path checks apply under
-  each root.
-- **Reason:** the design gap in D-028 was that Watcher resolution assumed the
-  watcher lives under the workspace. That holds for a git project whose
-  workspace *is* the repository, but not for an arc FirstMate driving product
-  code from a separate crew-tooling home. Requiring an env var to bridge the gap
-  would have left the fix inert until someone set it; deriving the home from the
-  arc root makes it self-configuring.
-- **No regression to D-028 or git projects:** the workspace search runs first and
-  unchanged, so any project that declares its own watcher (git projects like
-  pandamate/mandala, or any workspace with `.pandamate/watch`) resolves exactly
-  as before and never reaches the fallback. The fallback is gated to `kind:
-  "arc"`, so a git project without a watcher never inherits the arc one; an arc
-  workspace outside any `.arc` root (or with the tooling absent) derives nothing
-  and degrades to today's behaviour rather than failing. The arm-and-wake watcher
-  shape and adopted sessions remain untouched. The `watch` window still runs with
-  the product workspace as its working directory and `PANDAMATE_TMUX_SESSION`
-  set, which is what the crew tooling's `crew-retire` needs.
-- **Status:** accepted.
-
-### D-033 — Code work is isolated in a worktree; landing is per-VCS
+### D-033 — Code work is isolated in a Git worktree
 
 - **Decision:** Every supervising FirstMate's launch prompt (`supervisor.ts`, the
   `supervises` role) carries a standing rule: any task that changes code runs in
   its own isolated worktree on its own branch, never edited directly in the shared
   checkout, and the FirstMate prefers dispatching a worker into that worktree over
-  doing code work in its own session. **Isolation is universal; landing is the
-  home's call and differs by VCS** — a **git** FirstMate pushes to `main` directly
-  (and deploys per the project's settings); an **arc** FirstMate opens a PR and
-  watches CI, and never merges or deploys (the captain merges). Once Panda has
-  allowed pushing to main, a git FirstMate pushes without asking again; when the
-  landing mode is genuinely unclear, it asks «push or PR?» rather than guessing.
+  doing code work in its own session. Landing authority belongs to the durable
+  project configuration and never to the runtime profile.
   See [docs/18](18-agent-operations.md) and the capability matrix in
   [docs/19](19-firstmate-responsibilities.md).
-- **Reason:** Panda's directives (2026-07-28): «все фестмэйты которые что-то делают
-  в коде должны создать ветку … в изолированном воркспейсе», then «все кроме арк —
-  смело пуш в мэйны, а арк создавай пр-ы». Un-isolated code work piles onto
-  whatever branch is checked out (the arc main mount is often on someone else's
-  product branch; the pandamate git tree is shared by parallel sessions), so
-  isolation is enforced for everyone in the launch prompt. But landing ceremony is
-  a VCS-specific "how" that belongs to each home: git is low-ceremony (straight to
-  main), arc goes through Arcanum review + CI.
-- **Scope:** the `supervises` profiles (FirstMateArc, FirstMateGit) only.
+- **Reason:** Un-isolated code work piles onto a shared branch, so isolation is
+  enforced for every code task in the launch prompt.
+- **Scope:** the supervising `FirstMateGit` profile only.
   DocResearch is not a code-shipping FirstMate — its prompt keeps the light
   research framing ([D-030](#d-030--docresearch-launches-as-a-light-research-partner-not-a-firstmate))
   and does not carry this rule.
@@ -352,7 +304,7 @@ changes must update this file and the affected specification.
   property or preference of a FirstMate process. Pandamate stores the value and
   passes it, together with project kind, to the selected FirstMate protocol.
   Pandamate does not own or repeat the VCS-specific behavior of either value;
-  FirstMate-Git owns Git semantics and FirstMate-Arc owns Arc semantics.
+  FirstMate-Git owns Git landing semantics.
 - **Local documentation gate:** Pandamate installs a tracked pre-commit hook from
   `.githooks`. It loads the version pinned by `.nvmrc` with `nvm use`, then runs
   `pnpm docs:generate`; when output changes, the commit stops for review and
@@ -428,6 +380,16 @@ changes must update this file and the affected specification.
 - **Scope:** the attribution and child rendering live in the discovered Fleet
   projection (`spike:tui:discovered`) and the TUI. The daemon projection and CLI
   `status` do not yet carry hosted crew; extending them is a separate decision.
+- **Status:** accepted.
+
+### D-036 — Git-only code projects and Codex-first runtime selection
+
+- **Decision:** Pandamate supports `git` and `docs` project kinds.
+  Existing projects using the removed VCS kind migrate to `git`.
+  `FirstMateGit` runs with Codex CLI by default, while `PANDAMATE_FIRSTMATE_ADAPTER=claude-code` keeps Claude Code available.
+  Codex launches interactively with workspace-write sandboxing and on-request approvals.
+- **Reason:** One Git delivery model removes duplicated VCS policy and matches the maintained Firstmate implementation.
+  Keeping both coding-agent tools selectable preserves operator choice while making Codex the normal path.
 - **Status:** accepted.
 
 ## Proposed; validate in Phase 0

@@ -9,11 +9,13 @@ test("derives bounded state and runtime files from overrides", () => {
   const stateDirectory = join(tmpdir(), "pandamate-test-state");
   const runtimeDirectory = join(tmpdir(), "pandamate-test-runtime");
   const claudeExecutable = join(tmpdir(), "pandamate-test-claude");
+  const codexExecutable = join(tmpdir(), "pandamate-test-codex");
   assert.deepEqual(
     loadConfig({
       PANDAMATE_STATE_DIR: stateDirectory,
       PANDAMATE_RUNTIME_DIR: runtimeDirectory,
       PANDAMATE_CLAUDE_EXECUTABLE: claudeExecutable,
+      PANDAMATE_CODEX_EXECUTABLE: codexExecutable,
     }),
     {
       stateDirectory,
@@ -27,36 +29,15 @@ test("derives bounded state and runtime files from overrides", () => {
       memoryDirectory: join(stateDirectory, "memory"),
       backupsDirectory: join(stateDirectory, "backups"),
       tmuxSocketName: undefined,
-      firstMateAdapter: "claude-code",
+      firstMateAdapter: "codex",
+      codexExecutable,
       claudeExecutable,
-      firstMateHome: undefined,
       fakeFirstMateEntry: undefined,
       reconcileIntervalMs: 500,
       heartbeatStaleMs: 5000,
       shutdownGraceMs: 300_000,
       watcherRestartBackoffMs: 10_000,
     },
-  );
-});
-
-test("accepts an absolute firstmate home and rejects a relative one", () => {
-  const stateDirectory = join(tmpdir(), "state");
-  const runtimeDirectory = join(tmpdir(), "runtime");
-  const firstMateHome = join(tmpdir(), "arcadia/junk/pandanax/firstmate");
-  assert.equal(
-    loadConfig({
-      PANDAMATE_STATE_DIR: stateDirectory,
-      PANDAMATE_RUNTIME_DIR: runtimeDirectory,
-      PANDAMATE_FIRSTMATE_HOME: firstMateHome,
-    }).firstMateHome,
-    firstMateHome,
-  );
-  assert.throws(() =>
-    loadConfig({
-      PANDAMATE_STATE_DIR: stateDirectory,
-      PANDAMATE_RUNTIME_DIR: runtimeDirectory,
-      PANDAMATE_FIRSTMATE_HOME: "relative/firstmate",
-    }),
   );
 });
 

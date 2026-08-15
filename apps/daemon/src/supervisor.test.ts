@@ -4,16 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { loadConfig, type PandamateConfig } from "@pandamate/config";
+import {
+  loadConfig,
+  type PandamateConfig,
+} from "../../../packages/config/src/index.ts";
 import type { ActualState, Project } from "@pandamate/domain";
 
 import { FirstMateSupervisor, firstMateProfileForProject } from "./supervisor.ts";
 
 test("maps durable project kinds to public FirstMate profiles", () => {
-  assert.equal(
-    firstMateProfileForProject({ kind: "arc" }).name,
-    "FirstMateArc",
-  );
   assert.equal(
     firstMateProfileForProject({ kind: "git" }).name,
     "FirstMateGit",
@@ -25,13 +24,12 @@ test("maps durable project kinds to public FirstMate profiles", () => {
 });
 
 test("only the code profiles supervise workers", () => {
-  assert.equal(firstMateProfileForProject({ kind: "arc" }).supervises, true);
   assert.equal(firstMateProfileForProject({ kind: "git" }).supervises, true);
   assert.equal(firstMateProfileForProject({ kind: "docs" }).supervises, false);
 });
 
 /**
- * Reach the launch prompt for a project kind under the real (claude-code)
+ * Reach the launch prompt for a project kind under the real (Codex CLI)
  * adapter without standing up a reconciliation pass; the prompt is the final
  * argv element.
  */
@@ -75,7 +73,7 @@ test("DocResearch launches as a light research partner, not a FirstMate", () => 
   // framing and the product is documents, not pull requests.
   assert.doesNotMatch(
     prompt,
-    /FirstMate is this long-running main Claude Code process and role/,
+    /FirstMate is this long-running main coding-agent process and role/,
   );
   assert.match(prompt, /no crew, worktree, or pull-request machinery/);
   assert.match(prompt, /not pull requests/);
@@ -83,31 +81,28 @@ test("DocResearch launches as a light research partner, not a FirstMate", () => 
   assert.doesNotMatch(prompt, /merge mode is/);
   // Lifecycle framing is unchanged: identity header and the safety line stay.
   assert.match(prompt, /FIRSTMATE_OP: v1/);
-  assert.match(prompt, /long-running main Claude Code process/);
+  assert.match(prompt, /long-running main process/);
   assert.match(
     prompt,
     /Never operate on unrelated projects or pandamate:\* control-plane sessions\./,
   );
 });
 
-test("Arc and Git keep the full FirstMate supervisor framing", () => {
-  for (const kind of ["arc", "git"] as const) {
-    const prompt = launchPromptForKind(kind);
-    assert.match(prompt, /the main FirstMate/);
-    assert.match(prompt, /Supervise any workers you create/);
-    // Code work is isolated on its own branch; landing is VCS-specific.
-    assert.match(prompt, /its own isolated worktree/);
-    assert.match(prompt, /apply the selected FirstMate protocol/i);
-    assert.match(
-      prompt,
-      /FirstMate is this long-running main Claude Code process and role/,
-    );
-    assert.match(
-      prompt,
-      /Never operate on unrelated projects or pandamate:\* control-plane sessions\./,
-    );
-    assert.doesNotMatch(prompt, /research partner/);
-  }
+test("Git keeps the full FirstMate supervisor framing", () => {
+  const prompt = launchPromptForKind("git");
+  assert.match(prompt, /the main FirstMate/);
+  assert.match(prompt, /Supervise any workers you create/);
+  assert.match(prompt, /its own isolated worktree/);
+  assert.match(prompt, /apply the selected FirstMate protocol/i);
+  assert.match(
+    prompt,
+    /FirstMate is this long-running main coding-agent process and role/,
+  );
+  assert.match(
+    prompt,
+    /Never operate on unrelated projects or pandamate:\* control-plane sessions\./,
+  );
+  assert.doesNotMatch(prompt, /research partner/);
 });
 
 test("Git merge authority comes from the project", () => {
@@ -310,7 +305,7 @@ function fixtureProject(workspace: string): Project {
     slug: "fixture",
     title: "Fixture",
     customDisplayName: null,
-    kind: "arc",
+    kind: "git",
     mergeMode: "manual",
     workspace,
     desiredState: "running",
@@ -330,9 +325,29 @@ function fixtureConfig(directory: string): PandamateConfig {
   return loadConfig({
     PANDAMATE_STATE_DIR: join(directory, "state"),
     PANDAMATE_RUNTIME_DIR: join(directory, "runtime"),
-    PANDAMATE_CLAUDE_EXECUTABLE: join(directory, "claude"),
+    PANDAMATE_CODEX_EXECUTABLE: join(directory, "codex"),
+    PANDAMATE_FIRSTMATE_ADAPTER: "codex",
   });
 }
+
+test("launches Codex CLI without a Claude Code executable", () => {
+  const directory = mkdtempSync(join(tmpdir(), "pandamate-adapters-"));
+  try {
+    const project = fixtureProject(join(directory, "workspace"));
+    const codexConfig = fixtureConfig(directory);
+    const codex = new FirstMateSupervisor({
+      config: codexConfig,
+      store: new FakeStore([]),
+      tmux: new FakeTmux(),
+    }).launchCommand(project);
+    assert.equal(codexConfig.firstMateAdapter, "codex");
+    assert.ok(codex.includes(codexConfig.codexExecutable));
+    assert.ok(codex.includes("workspace-write"));
+    assert.ok(codex.includes("on-request"));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 function watcherWorkspace(directory: string): string {
   const workspace = join(directory, "workspace");
@@ -341,19 +356,6 @@ function watcherWorkspace(directory: string): string {
   writeFileSync(watcher, "#!/bin/sh\nsleep 300\n");
   chmodSync(watcher, 0o755);
   return workspace;
-}
-
-/**
- * A separate firstmate home holding the crew tooling's own `bin/fm-watch`, the
- * way an arc FirstMate keeps it entirely outside its product-code workspace.
- */
-function firstMateHomeWithWatcher(directory: string): string {
-  const home = join(directory, "firstmate-home");
-  mkdirSync(join(home, "bin"), { recursive: true });
-  const watcher = join(home, "bin", "fm-watch");
-  writeFileSync(watcher, "#!/bin/sh\nsleep 300\n");
-  chmodSync(watcher, 0o755);
-  return home;
 }
 
 test("deploys the Watcher beside a launched FirstMate and puts it back when it dies", () => {
@@ -415,94 +417,22 @@ test("deploys the Watcher beside a launched FirstMate and puts it back when it d
   }
 });
 
-test("deploys an arc FirstMate's Watcher from its firstmate home when the workspace is product code", () => {
-  const directory = mkdtempSync(join(tmpdir(), "pandamate-arc-watcher-"));
-  try {
-    // Product code with no watcher of its own, like monomarket.
-    const workspace = join(directory, "product");
-    mkdirSync(workspace, { recursive: true });
-    const home = firstMateHomeWithWatcher(directory);
-    const tmux = new FakeTmux();
-    tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
-    const store = new FakeStore([
-      { ...fixtureProject(workspace), kind: "arc" as const },
-    ]);
-    const config = loadConfig({
-      PANDAMATE_STATE_DIR: join(directory, "state"),
-      PANDAMATE_RUNTIME_DIR: join(directory, "runtime"),
-      PANDAMATE_CLAUDE_EXECUTABLE: join(directory, "claude"),
-      PANDAMATE_FIRSTMATE_HOME: home,
-    });
-    const supervisor = new FirstMateSupervisor({ config, store, tmux });
-
-    supervisor.reconcileNow();
-    assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
-      "firstmate-fixture",
-      "watch",
-    ]);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
-test("does not lend the arc firstmate home to a git project without its own Watcher", () => {
+test("does not deploy a Watcher when a Git project does not declare one", () => {
   const directory = mkdtempSync(join(tmpdir(), "pandamate-git-no-watcher-"));
   try {
     const workspace = join(directory, "repo");
     mkdirSync(workspace, { recursive: true });
-    const home = firstMateHomeWithWatcher(directory);
     const tmux = new FakeTmux();
     tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
     const store = new FakeStore([
       { ...fixtureProject(workspace), kind: "git" as const },
     ]);
-    const config = loadConfig({
-      PANDAMATE_STATE_DIR: join(directory, "state"),
-      PANDAMATE_RUNTIME_DIR: join(directory, "runtime"),
-      PANDAMATE_CLAUDE_EXECUTABLE: join(directory, "claude"),
-      PANDAMATE_FIRSTMATE_HOME: home,
-    });
-    const supervisor = new FirstMateSupervisor({ config, store, tmux });
-
-    supervisor.reconcileNow();
-    // A git project resolves its watcher only from its own workspace, so the
-    // arc home never leaks into it.
-    assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
-      "firstmate-fixture",
-    ]);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
-
-test("derives an arc FirstMate's firstmate home from the workspace's arc root, no config", () => {
-  const directory = mkdtempSync(join(tmpdir(), "pandamate-arc-derive-"));
-  try {
-    // Mark the arc mount root and put the shared crew tooling where an arc
-    // checkout keeps it: junk/pandanax/firstmate/bin/fm-watch.
-    mkdirSync(join(directory, ".arc"), { recursive: true });
-    const crewBin = join(directory, "junk", "pandanax", "firstmate", "bin");
-    mkdirSync(crewBin, { recursive: true });
-    const watcher = join(crewBin, "fm-watch");
-    writeFileSync(watcher, "#!/bin/sh\nsleep 300\n");
-    chmodSync(watcher, 0o755);
-    // Product-code workspace deep under that root, like monomarket.
-    const workspace = join(directory, "market", "front", "monomarket");
-    mkdirSync(workspace, { recursive: true });
-
-    const tmux = new FakeTmux();
-    tmux.createDetachedInDirectory("pandamate:home", directory, ["/bin/sh"]);
-    const store = new FakeStore([
-      { ...fixtureProject(workspace), kind: "arc" as const },
-    ]);
-    // No PANDAMATE_FIRSTMATE_HOME — the home is known from the arc root alone.
     const config = fixtureConfig(directory);
     const supervisor = new FirstMateSupervisor({ config, store, tmux });
 
     supervisor.reconcileNow();
     assert.deepEqual(tmux.windowNames("firstmate-fixture"), [
       "firstmate-fixture",
-      "watch",
     ]);
   } finally {
     rmSync(directory, { recursive: true, force: true });

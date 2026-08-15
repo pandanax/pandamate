@@ -28,8 +28,8 @@ bounded domain vocabularies are generated in the
 | `slug` | human-readable unique name |
 | `title` | display name |
 | `custom_display_name` | optional bounded Fleet label override |
-| `kind` | `arc`, `git`, or `docs` |
-| `merge_mode` | project-owned `auto` or `manual` input for the selected FirstMate protocol; non-git projects accept only `manual` |
+| `kind` | `git` or `docs` |
+| `merge_mode` | project-owned `auto` or `manual` input for the selected FirstMate protocol; document projects accept only `manual` |
 | `workspace` | canonical absolute path |
 | `desired_state` | requested lifecycle state |
 | `actual_state` | observed lifecycle state |

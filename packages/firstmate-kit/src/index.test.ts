@@ -13,7 +13,6 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
-  arcFirstMateHome,
   FirstMateClient,
   firstMateWorkspaceEvidence,
   HookSpoolClient,
@@ -93,62 +92,6 @@ test("finds a declared Watcher and ignores the hook-armed shape", () => {
     assert.equal(workspaceWatcherCommand(workspace), declared);
   } finally {
     rmSync(workspace, { recursive: true, force: true });
-  }
-});
-
-test("falls back to a firstmate home when the workspace declares no Watcher", () => {
-  const workspace = mkdtempSync(join(tmpdir(), "pandamate-product-"));
-  const home = mkdtempSync(join(tmpdir(), "pandamate-fm-home-"));
-  try {
-    // Product code: nothing under the workspace, so a home fallback is needed.
-    assert.equal(workspaceWatcherCommand(workspace), null);
-    assert.equal(workspaceWatcherCommand(workspace, [home]), null);
-
-    // The arc FirstMate's own crew tooling keeps fm-watch under its home.
-    const crew = join(home, "bin");
-    mkdirSync(crew, { recursive: true });
-    const watcher = join(crew, "fm-watch");
-    writeFileSync(watcher, "#!/bin/sh\n");
-    chmodSync(watcher, 0o755);
-    assert.equal(workspaceWatcherCommand(workspace, [home]), watcher);
-    // A trailing slash on the home is tolerated the same way as on a workspace.
-    assert.equal(workspaceWatcherCommand(workspace, [`${home}/`]), watcher);
-    // Without the fallback the product workspace still resolves nothing.
-    assert.equal(workspaceWatcherCommand(workspace), null);
-
-    // A watcher the workspace itself declares always wins over the fallback, so
-    // a git project whose workspace is the repository is never affected.
-    mkdirSync(join(workspace, ".pandamate"), { recursive: true });
-    const declared = join(workspace, ".pandamate", "watch");
-    writeFileSync(declared, "#!/bin/sh\n");
-    chmodSync(declared, 0o755);
-    assert.equal(workspaceWatcherCommand(workspace, [home]), declared);
-  } finally {
-    rmSync(workspace, { recursive: true, force: true });
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
-test("derives the arc firstmate home from the workspace's arc root", () => {
-  const root = mkdtempSync(join(tmpdir(), "pandamate-arc-root-"));
-  try {
-    // A directory with no `.arc` ancestor has no derivable home.
-    const loose = join(root, "loose");
-    mkdirSync(loose, { recursive: true });
-    assert.equal(arcFirstMateHome(loose), null);
-
-    // Mark the arc mount root; a product workspace deep under it now derives the
-    // shared crew-tooling home under that same root — no configuration needed.
-    mkdirSync(join(root, ".arc"), { recursive: true });
-    const workspace = join(root, "market", "front", "monomarket");
-    mkdirSync(workspace, { recursive: true });
-    const home = join(root, "junk", "pandanax", "firstmate");
-    assert.equal(arcFirstMateHome(workspace), home);
-    // A trailing slash on the workspace is tolerated, and the root derives it too.
-    assert.equal(arcFirstMateHome(`${workspace}/`), home);
-    assert.equal(arcFirstMateHome(root), home);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
   }
 });
 

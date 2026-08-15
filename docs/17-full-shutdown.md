@@ -16,7 +16,7 @@ everything Pandamate owns:
 2. **Close every FirstMate gracefully.** Each `firstmate-*` session is asked, in
    its own window 0, to run the standard graceful shutdown: save state and a
    checkpoint, dismiss the crew, end child sessions, servers and connections,
-   unmount an Arcadia workspace if one is mounted, and close its own tmux
+   stop project-owned processes and close its own tmux
    session last of all.
 3. **Wait, then force only what is left.** Pandamate polls for each session to
    disappear. Whatever is still up when the grace period ends has its home tab
@@ -74,7 +74,7 @@ have been the wrong rule.
 ## 4. Grace, force, and honesty about outcomes
 
 `PANDAMATE_SHUTDOWN_GRACE_MS` (default five minutes, `--timeout` on the CLI)
-bounds step 3. Dismissing a crew and unmounting an Arcadia workspace is minutes
+bounds step 3. Dismissing a crew and stopping project-owned processes is minutes
 of real work, so the default is generous.
 
 Every session ends in exactly one outcome, and the report says which:

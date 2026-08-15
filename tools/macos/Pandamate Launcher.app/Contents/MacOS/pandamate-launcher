@@ -4,6 +4,7 @@ set -u
 
 readonly PROJECT_DIR="/Users/pandanax/Yandex.Disk.localized/dev/pandamate"
 readonly TMUX="/opt/homebrew/bin/tmux"
+readonly NODE="/opt/homebrew/bin/node"
 readonly LOG="/private/tmp/pandamate-launcher.log"
 # A TUI that dies on startup takes its pane — and its stack trace — with it, so
 # the launcher used to report only "did not render in time" with nothing to go
@@ -13,8 +14,8 @@ readonly TUI_LOG="/private/tmp/pandamate-tui.log"
 readonly SESSION_NAME="pandamate:home"
 readonly WRITE_SESSION_NAME="pandamate:write"
 readonly IDLE_PROBE_SESSION_NAME="pandamate:idle-probe"
-readonly TUI_COMMAND="exec /bin/zsh -lc 'cd /Users/pandanax/Yandex.Disk.localized/dev/pandamate && source /Users/pandanax/.nvm/nvm.sh && nvm use >/dev/null && exec pnpm spike:tui:discovered' 2>>$TUI_LOG"
-readonly IDLE_PROBE_COMMAND="exec /bin/zsh -lc 'cd /Users/pandanax/Yandex.Disk.localized/dev/pandamate && source /Users/pandanax/.nvm/nvm.sh && nvm use >/dev/null && exec pnpm spike:tui:idle -- --24h' 2>>$TUI_LOG"
+readonly TUI_COMMAND="exec /bin/zsh -lc 'cd \"$PROJECT_DIR\" && exec /usr/bin/env \"$NODE\" --experimental-strip-types spikes/tmux/src/launch-tui.ts' 2>>$TUI_LOG"
+readonly IDLE_PROBE_COMMAND="exec /bin/zsh -lc 'cd \"$PROJECT_DIR\" && exec /usr/bin/env \"$NODE\" --experimental-strip-types spikes/tmux/src/idle-probe.ts -- --24h' 2>>$TUI_LOG"
 
 exec >>"$LOG" 2>&1
 # One launch per file, so a failure is never buried under yesterday's output.
@@ -32,6 +33,11 @@ APPLESCRIPT
 
 if [[ ! -x "$TMUX" ]]; then
   show_error "tmux was not found at $TMUX"
+  exit 1
+fi
+
+if [[ ! -x "$NODE" ]]; then
+  show_error "Node runtime was not found at $NODE"
   exit 1
 fi
 
@@ -115,7 +121,7 @@ function idle_probe_is_running() {
 # current code from PROJECT_DIR. `daemon start` alone no-ops when an old daemon
 # is already running, which is why launches kept booting the stale version.
 if ! /bin/zsh -lc \
-  "cd '$PROJECT_DIR' && source /Users/pandanax/.nvm/nvm.sh && nvm use >/dev/null && { pnpm pandamate daemon stop || true; } && pnpm pandamate daemon start"; then
+  "cd '$PROJECT_DIR' && { /usr/bin/env '$NODE' --experimental-strip-types apps/cli/src/main.ts daemon stop || true; } && /usr/bin/env '$NODE' --experimental-strip-types apps/cli/src/main.ts daemon start"; then
   show_error "Pandamate daemon could not start. See $LOG"
   exit 1
 fi

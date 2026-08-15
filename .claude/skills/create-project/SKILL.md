@@ -1,6 +1,6 @@
 ---
 name: create-project
-description: Create and start a durable Pandamate project from a local folder. Use when Panda drops or names a folder and asks to create, onboard, raise, launch, or run it as FirstMateArc, FirstMateGit, DocResearch, FirstMateDocs, arc, git, or docs.
+description: Create and start a durable Pandamate project from a local folder. Use when Panda drops or names a folder and asks to create, onboard, raise, launch, or run it as FirstMateGit, DocResearch, FirstMateDocs, git, or docs.
 ---
 
 # Create Project
@@ -11,7 +11,6 @@ Turn one existing local directory into one supervised Pandamate project.
 
 1. Require a normalized absolute directory path and one profile.
 2. Map profiles exactly:
-   - `FirstMateArc` or `arc` -> `arc`
    - `FirstMateGit` or `git` -> `git`
    - `DocResearch`, `FirstMateDocs`, or `docs` -> `docs`
 3. Refuse to guess the profile when it is absent.
@@ -32,8 +31,8 @@ pnpm pandamate project create <profile> <absolute-folder>
 
 Explain this when Panda asks where FirstMate lives:
 
-- Pandamate starts the main FirstMate as a long-running Claude Code process.
-- The executable defaults to `~/.local/bin/claude`.
+- Pandamate starts the main FirstMate as a long-running Codex CLI or Claude Code process.
+- Codex CLI is the default; set `PANDAMATE_FIRSTMATE_ADAPTER=claude-code` to select Claude Code.
 - The process starts in the registered workspace.
 - Its independent tmux session is `firstmate-<project-slug>`; opening a
   registered project links window `0` into `pandamate:home` as a tab without

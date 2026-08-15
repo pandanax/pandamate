@@ -390,7 +390,7 @@ function pandamateInputPanel(value: string) {
     }),
     Text({
       content:
-        'Кому я нужен?  ·  Создай FirstMateGit "/absolute/path"  ·  FirstMateArc  ·  DocResearch',
+        'Кому я нужен?  ·  Создай FirstMateGit "/absolute/path"  ·  DocResearch',
       fg: colors.cyan,
     }),
     Box(
@@ -527,7 +527,7 @@ function shutdownConfirmPanel(model: DeckModel) {
     }),
     Text({
       content:
-        "   worktrees released, Arcadia workspaces unmounted, state saved.",
+        "   worktrees released, child processes stopped, state saved.",
       fg: colors.softWhite,
     }),
     Text({

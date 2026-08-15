@@ -48,11 +48,11 @@ test("validates project-owned merge modes", () => {
   );
   assert.throws(() =>
     validateCreateProjectInput({
-      slug: "arc-project",
-      title: "Arc project",
-      kind: "arc",
+      slug: "research",
+      title: "Research",
+      kind: "docs",
       mergeMode: "auto",
-      workspace: "/workspace/arc-project",
+      workspace: "/workspace/research",
     }),
   );
 });
@@ -122,9 +122,9 @@ test("builds project onboarding for all public profile names", () => {
 test("parses dragged folders before or after a profile", () => {
   assert.equal(
     parseProjectOnboardingText(
-      'Создай проект FirstMateArc "/workspace/arcadia project"',
+      'Создай проект FirstMateGit "/workspace/git-project"',
     ).project.workspace,
-    "/workspace/arcadia project",
+    "/workspace/git-project",
   );
   assert.equal(
     parseProjectOnboardingText(

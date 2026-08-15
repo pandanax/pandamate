@@ -22,7 +22,7 @@ baseline.
 | Phase 4 | partial | topic memory, reconcile/import, recovery journal/classification/report, operational backup CLI/policy and restore |
 | Phase 5 | partial read-only slice | validated tools, durable conversation/session projection, explicit routing/memory workflow, TUI cancellation, context/cost telemetry |
 | Phase 6 | partial live TUI | Conversation/Memory/Sessions/Diagnostics, command palette, subscriptions, full accessibility/terminal/visual acceptance |
-| Phase 7 | partial shared profiles | formal adapters, capability and recovery policy per profile, real Arc/Git/Docs end-to-end acceptance |
+| Phase 7 | partial shared profiles | formal adapters, capability and recovery policy per profile, real Git/Docs end-to-end acceptance |
 | Phase 8 | partial personal operations | launch-at-login, support bundle, retention, backup/restore, failure injection, upgrade/rollback, profiling, seven-day dogfood |
 
 ## Implemented evidence

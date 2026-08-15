@@ -95,8 +95,9 @@ stop(project, mode)
 recover(project, checkpoint)
 ```
 
-Today `FirstMateSupervisor` shares one Claude Code launcher and specializes the
-launch prompt/profile for `FirstMateArc`, `FirstMateGit`, and `DocResearch`.
+Today `FirstMateSupervisor` launches Codex CLI by default and keeps Claude Code
+selectable through `PANDAMATE_FIRSTMATE_ADAPTER`.
+Both tools share the launch prompt/profile for `FirstMateGit` and `DocResearch`.
 `@pandamate/firstmate-kit` supplies the deterministic mailbox, status,
 checkpoint, hook spool, and workspace-evidence boundary. The formal adapter
 interface above, adapter-specific delivery/recovery, and per-profile capability
@@ -192,7 +193,7 @@ No HTTP listener is required for MVP.
 ## 5. Runtime and state locations
 
 The repository contains source and checked-in specification only. Live state
-must not be stored inside a Git checkout, Arcadia tree, Yandex Disk, Dropbox, or
+must not be stored inside a Git checkout, Yandex Disk, Dropbox, or
 another synchronized/network filesystem.
 
 On macOS, use an OS-local application data directory for:

@@ -10,12 +10,12 @@ import {
 } from "./onboarding.ts";
 
 test("normalizes a path-only Pandamate input", () => {
-  assert.equal(pathOnlyInput('  "/workspace/mandala/.claude"  '), "/workspace/mandala/.claude");
+  assert.equal(pathOnlyInput('  "/workspace/mandala/.codex"  '), "/workspace/mandala/.codex");
   assert.equal(pathOnlyInput("/workspace/mandala/"), "/workspace/mandala/");
   assert.equal(pathOnlyInput("what is running?"), null);
 });
 
-test("resolves a configured Git FirstMate from its .claude directory", () => {
+test("does not treat legacy .claude settings as FirstMate configuration", () => {
   const workspace = mkdtempSync(join(tmpdir(), "pandamate-onboarding-"));
   mkdirSync(join(workspace, ".claude"), { recursive: true });
   mkdirSync(join(workspace, ".git"), { recursive: true });
@@ -24,11 +24,23 @@ test("resolves a configured Git FirstMate from its .claude directory", () => {
     JSON.stringify({ env: { FM_HOME: join(workspace, ".firstmate") } }),
   );
 
-  assert.deepEqual(
-    configuredFirstMateProfile(join(workspace, ".claude")),
-    {
-      profile: "FirstMateGit",
-      workspace,
-    },
+  assert.throws(
+    () => configuredFirstMateProfile(workspace),
+    /No FirstMate configuration found/,
   );
+});
+
+test("resolves a configured Git FirstMate from its .codex directory", () => {
+  const workspace = mkdtempSync(join(tmpdir(), "pandamate-codex-onboarding-"));
+  mkdirSync(join(workspace, ".codex"), { recursive: true });
+  mkdirSync(join(workspace, ".git"), { recursive: true });
+  writeFileSync(
+    join(workspace, ".codex", "config.toml"),
+    'project_doc_fallback_filenames = ["FIRSTMATE.md"]\n',
+  );
+
+  assert.deepEqual(configuredFirstMateProfile(join(workspace, ".codex")), {
+    profile: "FirstMateGit",
+    workspace,
+  });
 });

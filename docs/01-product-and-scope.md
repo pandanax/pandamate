@@ -3,16 +3,14 @@
 ## 1. Product statement
 
 Pandamate is a terminal-native personal operations console. It supervises
-multiple independent FirstMate orchestrators that work in Arcadia repositories,
-Git repositories, or document workspaces.
+multiple independent FirstMate orchestrators that work in Git repositories or
+document workspaces.
 
 The normal relationship is:
 
 ```text
 Panda
 └── Pandamate
-    ├── FirstMateArc
-    │   └── project workers
     ├── FirstMateGit
     │   └── project workers
     └── DocResearch
@@ -117,17 +115,16 @@ materialization/reconciliation remain Phase 4/5 work.
 
 ## 4. FirstMate types
 
-The first release supports three profiles:
+The first release supports two profiles:
 
 | Kind | Workspace | VCS assumptions | Typical work |
 |---|---|---|---|
-| `arc` | Arcadia | `arc`, Arcadia worktrees and tools | engineering tasks |
 | `git` | Git repository | Git worktree/branch conventions | pet and public projects |
 | `docs` / `DocResearch` | directory or document set | none required | legal, research, writing |
 
 Profiles define launch and capability policy. They do not fork the core runtime.
-The two code profiles launch as supervising FirstMates that own durable work and
-dispatch workers; `DocResearch` instead launches as a light research partner — a
+The code profile launches a supervising FirstMate that owns durable work and
+dispatches workers; `DocResearch` instead launches as a light research partner — a
 conversational session that opens by asking the captain to scope the research and
 captures durable findings as written notes ([D-030](08-decisions.md)).
 
@@ -148,7 +145,7 @@ already shipped. Current coverage and remaining gates are tracked in
 - conversational routing through Claude Agent SDK;
 - Markdown semantic memory;
 - crash and reboot recovery;
-- Arc, Git, and Docs launch profiles;
+- Git and Docs launch profiles;
 - structured diagnostics and exportable support bundle.
 
 ### Explicitly deferred
@@ -159,7 +156,7 @@ already shipped. Current coverage and remaining gates are tracked in
 - cloud synchronization;
 - arbitrary nested orchestration visibility;
 - billing/cost optimization across providers;
-- replacing the native Claude Code interactive UI;
+- replacing the native Codex CLI or Claude Code interactive UI;
 - general workflow-builder UI;
 - plugin marketplace.
 

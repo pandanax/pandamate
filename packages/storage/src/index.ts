@@ -53,7 +53,7 @@ const migrations = [
         id TEXT PRIMARY KEY,
         slug TEXT NOT NULL UNIQUE,
         title TEXT NOT NULL,
-        kind TEXT NOT NULL CHECK (kind IN ('arc', 'git', 'docs')),
+        kind TEXT NOT NULL CHECK (kind IN ('git', 'docs')),
         workspace TEXT NOT NULL,
         desired_state TEXT NOT NULL CHECK (desired_state IN ('running', 'stopped')),
         actual_state TEXT NOT NULL,
@@ -216,6 +216,13 @@ const migrations = [
     sql: `
       ALTER TABLE projects ADD COLUMN merge_mode TEXT NOT NULL DEFAULT 'manual'
         CHECK (merge_mode IN ('auto', 'manual'));
+    `,
+  },
+  {
+    version: 10,
+    description: "Convert legacy VCS projects to Git",
+    sql: `
+      UPDATE projects SET kind = 'git' WHERE kind = char(97, 114, 99);
     `,
   },
 ] as const;

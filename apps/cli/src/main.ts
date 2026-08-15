@@ -56,8 +56,8 @@ function usage(): never {
   pandamate memory set <topic> <value> <summary> [source]
   pandamate memory list [--history] [--json]
   pandamate memory check [--json]
-  pandamate project add <slug> <title> <arc|git|docs> <absolute-workspace>
-  pandamate project create <FirstMateArc|FirstMateGit|DocResearch> <absolute-workspace> [title]
+  pandamate project add <slug> <title> <git|docs> <absolute-workspace>
+  pandamate project create <FirstMateGit|DocResearch> <absolute-workspace> [title]
   pandamate project merge-mode <slug> <auto|manual> [--json]
   pandamate project adopt <slug> <tmux-session> [--json]
   pandamate project show <slug> [--json]
@@ -390,7 +390,7 @@ async function projectCommand(): Promise<void> {
     if (
       !slug ||
       !title ||
-      (kind !== "arc" && kind !== "git" && kind !== "docs") ||
+      (kind !== "git" && kind !== "docs") ||
       !workspace
     ) {
       usage();

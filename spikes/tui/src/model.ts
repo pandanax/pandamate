@@ -18,7 +18,7 @@ export interface ProjectSummary {
    * it is the only handle a stopped item can be started again by.
    */
   readonly slug: string | null;
-  readonly profile: "FirstMateArc" | "FirstMateGit" | "DocResearch" | null;
+  readonly profile: "FirstMateGit" | "DocResearch" | null;
   readonly sessionName: string | null;
   readonly state:
     | "registered"
@@ -80,9 +80,9 @@ export const demoProjects: readonly ProjectSummary[] = [
     ],
   },
   {
-    name: "ARC-1234",
-    slug: "arc-1234",
-    profile: "FirstMateArc",
+    name: "GIT-1234",
+    slug: "git-1234",
+    profile: "FirstMateGit",
     sessionName: null,
     state: "waiting",
     summary: "Needs a product decision",
@@ -180,7 +180,6 @@ function isProjectSummary(value: unknown): value is ProjectSummary {
     candidate.name.length <= 80 &&
     (candidate.slug === null || isProjectSlug(candidate.slug)) &&
     (candidate.profile === null ||
-      candidate.profile === "FirstMateArc" ||
       candidate.profile === "FirstMateGit" ||
       candidate.profile === "DocResearch") &&
     (candidate.sessionName === null ||

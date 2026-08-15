@@ -83,14 +83,6 @@ test("CLI shows identical projects and event journal after daemon restart", asyn
     await run(
       "project",
       "add",
-      "arc-1234",
-      "ARC-1234",
-      "arc",
-      "/workspace/arcadia",
-    );
-    await run(
-      "project",
-      "add",
       "legal",
       "Legal",
       "docs",

@@ -4,7 +4,7 @@
 
 Sources: `packages/storage/src/index.ts`.
 
-Current schema migration: `9`.
+Current schema migration: `10`.
 
 | Version | Purpose |
 |---:|---|
@@ -17,3 +17,4 @@ Current schema migration: `9`.
 | 7 | Durable decisions and supersession |
 | 8 | Custom project display names |
 | 9 | Project-owned automatic or manual merge mode |
+| 10 | Convert legacy VCS projects to Git |

@@ -733,7 +733,7 @@ child.on("message", async (value: unknown) => {
       const looksLikeOnboarding =
         submittedPath !== null ||
         (request.text.includes("/") &&
-          /\b(firstmate[\s_-]*(?:arc|git|docs)|doc[\s_-]*research|arc|git|docs)\b/i.test(
+          /\b(firstmate[\s_-]*(?:git|docs)|doc[\s_-]*research|git|docs)\b/i.test(
             request.text,
           ));
       if (!looksLikeOnboarding) {
