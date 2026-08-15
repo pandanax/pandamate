@@ -7,7 +7,6 @@ import { join } from "node:path";
 import type { PandamateConfig } from "@pandamate/config";
 import type { Project } from "@pandamate/domain";
 import {
-  arcFirstMateHome,
   firstMateWorkspaceEvidence,
   workspaceWatcherCommand,
 } from "@pandamate/firstmate-kit";
@@ -63,11 +62,11 @@ interface WatcherDeployment {
 export function firstMateProfileForProject(
   project: Pick<Project, "kind">,
 ): {
-  readonly name: "FirstMateArc" | "FirstMateGit" | "DocResearch";
+  readonly name: "FirstMateGit" | "DocResearch";
   readonly instructions: string;
   /**
    * Whether this profile raises a supervising FirstMate that owns durable work
-   * and dispatches workers (Arc, Git), or a lightweight research partner that
+   * and dispatches workers (Git), or a lightweight research partner that
    * only runs a conversational session (DocResearch). It selects the
    * launch-prompt role framing, never any lifecycle: every profile is still the
    * long-running main process for its project.
@@ -75,13 +74,6 @@ export function firstMateProfileForProject(
   readonly supervises: boolean;
 } {
   switch (project.kind) {
-    case "arc":
-      return {
-        name: "FirstMateArc",
-        instructions:
-          "This is an Arcadia workspace. Follow repository AGENTS.md rules, use arc for VCS, and use Arcadia-native code search and ya tooling.",
-        supervises: true,
-      };
     case "git":
       return {
         name: "FirstMateGit",
@@ -204,6 +196,47 @@ export class FirstMateSupervisor {
       ];
     }
     const profile = firstMateProfileForProject(project);
+    const identity = profile.supervises
+      ? `You are running as ${profile.name}, the main FirstMate for project "${project.title}" (${project.slug}).`
+      : `You are running as a research partner (${profile.name}) for project "${project.title}" (${project.slug}).`;
+    const runtimeName =
+      this.#config.firstMateAdapter === "codex" ? "Codex CLI" : "Claude Code";
+    const runtimeExecutable =
+      this.#config.firstMateAdapter === "codex"
+        ? this.#config.codexExecutable
+        : this.#config.claudeExecutable;
+    const runtime = profile.supervises
+      ? `Your runtime is ${runtimeName} at ${runtimeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. FirstMate is this long-running main coding-agent process and role; it is not a second hidden executable. Pandamate supplies the durable project facts kind=${project.kind} and mergeMode=${project.mergeMode}; apply the selected FirstMate protocol to those values.`
+      : `Your runtime is ${runtimeName} at ${runtimeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. You are this long-running main process for the project — not a second hidden executable, and there is no crew, worktree, or pull-request machinery to run.`;
+    const role = profile.supervises
+      ? "Own this project's detailed work and durable project state. Read the repository instructions and existing project context before acting. Supervise any workers you create, keep their work isolated, report bounded status and checkpoints through the Pandamate integration when available, and remain available between assignments. Any task that changes code runs in its own isolated worktree on its own branch, never edited directly in the shared checkout; isolate such tasks by default and prefer dispatching a worker into that worktree over doing code work in your own session. Apply the VCS-specific landing contract owned by the selected FirstMate protocol."
+      : "Begin by asking the captain focused clarifying questions about the research goal, scope, sources, and the desired deliverable before doing any work. Keep this a lightweight, conversational research session — you are a research partner, not a code-shipping FirstMate. Your product is documents — research notes, a filled wiki, written reports — not pull requests, and you neither dispatch workers nor open worktrees. Capture durable findings as written notes in the workspace.";
+    const prompt = `FIRSTMATE_OP: v1
+${identity}
+Your workspace and working directory are ${project.workspace}.
+${runtime}
+${profile.instructions}
+${role} Never operate on unrelated projects or pandamate:* control-plane sessions.`;
+    const environment = [
+      "/usr/bin/env",
+      `PANDAMATE_PROJECT_SLUG=${project.slug}`,
+      `PANDAMATE_PROJECT_KIND=${project.kind}`,
+      `PANDAMATE_MERGE_MODE=${project.mergeMode}`,
+      `PANDAMATE_TMUX_SESSION=${targetForProject(project.slug)}`,
+      `PANDAMATE_SOCKET_PATH=${this.#config.socketPath}`,
+      `PANDAMATE_HOOK_SPOOL_DIR=${this.#config.hookSpoolDirectory}`,
+    ];
+    if (this.#config.firstMateAdapter === "codex") {
+      return [
+        ...environment,
+        this.#config.codexExecutable,
+        "--ask-for-approval",
+        "on-request",
+        "--sandbox",
+        "workspace-write",
+        prompt,
+      ];
+    }
     const hookEntry = new URL(
       "../../../packages/firstmate-kit/src/hook-cli.ts",
       import.meta.url,
@@ -225,40 +258,15 @@ export class FirstMateSupervisor {
             {
               matcher: "",
               hooks: [
-                {
-                  type: "command",
-                  command: hookCommand,
-                  timeout: 2,
-                },
+                { type: "command", command: hookCommand, timeout: 2 },
               ],
             },
           ],
         ]),
       ),
     });
-    const identity = profile.supervises
-      ? `You are running as ${profile.name}, the main FirstMate for project "${project.title}" (${project.slug}).`
-      : `You are running as a research partner (${profile.name}) for project "${project.title}" (${project.slug}).`;
-    const runtime = profile.supervises
-      ? `Your runtime is the Claude Code executable at ${this.#config.claudeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. FirstMate is this long-running main Claude Code process and role; it is not a second hidden executable. Pandamate supplies the durable project facts kind=${project.kind} and mergeMode=${project.mergeMode}; apply the selected FirstMate protocol to those values.`
-      : `Your runtime is the Claude Code executable at ${this.#config.claudeExecutable}, launched by Pandamate inside tmux session ${targetForProject(project.slug)}. You are this long-running main Claude Code process for the project — not a second hidden executable, and there is no crew, worktree, or pull-request machinery to run.`;
-    const role = profile.supervises
-      ? "Own this project's detailed work and durable project state. Read the repository instructions and existing project context before acting. Supervise any workers you create, keep their work isolated, report bounded status and checkpoints through the Pandamate integration when available, and remain available between assignments. Any task that changes code runs in its own isolated worktree on its own branch, never edited directly in the shared checkout; isolate such tasks by default and prefer dispatching a worker into that worktree over doing code work in your own session. Apply the VCS-specific landing contract owned by the selected FirstMate protocol."
-      : "Begin by asking the captain focused clarifying questions about the research goal, scope, sources, and the desired deliverable before doing any work. Keep this a lightweight, conversational research session — you are a research partner, not a code-shipping FirstMate. Your product is documents — research notes, a filled wiki, written reports — not pull requests, and you neither dispatch workers nor open worktrees. Capture durable findings as written notes in the workspace.";
-    const prompt = `FIRSTMATE_OP: v1
-${identity}
-Your workspace and working directory are ${project.workspace}.
-${runtime}
-${profile.instructions}
-${role} Never operate on unrelated projects or pandamate:* control-plane sessions.`;
     return [
-      "/usr/bin/env",
-      `PANDAMATE_PROJECT_SLUG=${project.slug}`,
-      `PANDAMATE_PROJECT_KIND=${project.kind}`,
-      `PANDAMATE_MERGE_MODE=${project.mergeMode}`,
-      `PANDAMATE_TMUX_SESSION=${targetForProject(project.slug)}`,
-      `PANDAMATE_SOCKET_PATH=${this.#config.socketPath}`,
-      `PANDAMATE_HOOK_SPOOL_DIR=${this.#config.hookSpoolDirectory}`,
+      ...environment,
       this.#config.claudeExecutable,
       "--settings",
       hookSettings,
@@ -380,7 +388,8 @@ ${role} Never operate on unrelated projects or pandamate:* control-plane session
    */
   #ensureWatcher(project: Project, sessionName: string): void {
     if (
-      this.#config.firstMateAdapter !== "claude-code" ||
+      (this.#config.firstMateAdapter !== "claude-code" &&
+        this.#config.firstMateAdapter !== "codex") ||
       sessionName !== targetForProject(project.slug)
     ) {
       return;
@@ -395,20 +404,7 @@ ${role} Never operate on unrelated projects or pandamate:* control-plane session
       return;
     }
     try {
-      // An arc FirstMate's workspace is product code with no watcher of its
-      // own; its watcher lives in the arc crew-tooling home. That home is known
-      // without configuration — derived from the workspace's arc root — and an
-      // explicit PANDAMATE_FIRSTMATE_HOME overrides the derived path. Git
-      // projects resolve from their own workspace and are given no fallback, so
-      // a git project without a watcher never inherits the arc one.
-      const arcHome =
-        project.kind === "arc"
-          ? (this.#config.firstMateHome ?? arcFirstMateHome(project.workspace))
-          : null;
-      const command = workspaceWatcherCommand(
-        project.workspace,
-        arcHome ? [arcHome] : [],
-      );
+      const command = workspaceWatcherCommand(project.workspace);
       if (!command) {
         return;
       }
@@ -605,7 +601,8 @@ ${role} Never operate on unrelated projects or pandamate:* control-plane session
     ) {
       this.#ensureWatcher(project, runtime.name);
       const evidence =
-        this.#config.firstMateAdapter === "claude-code"
+        this.#config.firstMateAdapter === "claude-code" ||
+        this.#config.firstMateAdapter === "codex"
           ? firstMateWorkspaceEvidence(project.workspace)
           : {
               heartbeatAt: null,

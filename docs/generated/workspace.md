@@ -49,10 +49,10 @@ This inventory includes production and spike sources, but excludes test-only use
 | Variable | Referenced by |
 |---|---|
 | `PANDAMATE_CLAUDE_EXECUTABLE` | `packages/config/src/index.ts` |
+| `PANDAMATE_CODEX_EXECUTABLE` | `packages/config/src/index.ts` |
 | `PANDAMATE_EVENTS_JSON` | `spikes/tmux/src/launch-tui.ts`<br>`spikes/tmux/src/tui-smoke.ts`<br>`spikes/tui/src/index.ts`<br>`spikes/tui/src/model.ts` |
 | `PANDAMATE_FAKE_FIRSTMATE_ENTRY` | `packages/config/src/index.ts` |
 | `PANDAMATE_FIRSTMATE_ADAPTER` | `packages/config/src/index.ts` |
-| `PANDAMATE_FIRSTMATE_HOME` | `apps/daemon/src/supervisor.ts`<br>`packages/config/src/index.ts`<br>`packages/firstmate-kit/src/index.ts` |
 | `PANDAMATE_HEARTBEAT_STALE_MS` | `packages/config/src/index.ts` |
 | `PANDAMATE_HOOK_SPOOL_DIR` | `apps/daemon/src/supervisor.ts`<br>`packages/firstmate-kit/src/hook-cli.ts` |
 | `PANDAMATE_MERGE_MODE` | `apps/daemon/src/supervisor.ts` |

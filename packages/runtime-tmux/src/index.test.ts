@@ -804,7 +804,6 @@ test("delivers graceful shutdown to the active pane in window zero", () => {
   assert.deepEqual(result, { pane: "$12:@3.%7" });
   assert.equal(deliveries[0]?.pane, "$12:@3.%7");
   assert.match(deliveries[0]?.text ?? "", /Всех матросов увольняем/);
-  assert.match(deliveries[0]?.text ?? "", /Arcadia/);
   assert.match(deliveries[0]?.text ?? "", /Не трогай чужие проекты/);
 });
 

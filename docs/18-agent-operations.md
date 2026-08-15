@@ -1,107 +1,61 @@
 # Agent operating notes
 
-Common operating rules for any FirstMate the Pandamate control plane raises — git
-and arc alike. The two differ in mechanics, not in principle, so the shared rules
-live here, in the Pandamate repo (versioned and reviewed, not in a per-session
-memory store). **Per-VCS specifics live in each FirstMate's own home** — the arc
-FirstMate's `AGENTS.md`, the git FirstMate's own docs — not here. Which layer and
-which home owns each capability is indexed in
-[docs/19-firstmate-responsibilities.md](19-firstmate-responsibilities.md).
-Referenced from [CLAUDE.md](../CLAUDE.md).
+Common operating rules for every FirstMate raised by Pandamate live here.
+Git-specific mechanics live in the Firstmate repository; this document owns the shared contract.
 
-## Code tasks are isolated; landing is per-VCS
+## Code tasks are isolated; landing is project-owned
 
-Every task that changes code runs in its own isolated worktree on its own branch —
-never edit the shared checkout in place. Isolate such tasks by default, and prefer
-dispatching a worker into that worktree over doing code in your own session
-(Panda, 2026-07-28; [D-033](08-decisions.md)).
+Every code-changing task runs in its own Git worktree on its own branch.
+Never edit the shared checkout in place.
 
 Landing authority is durable project state, not a preference of the running
 FirstMate.
 Pandamate stores the project kind and merge mode and passes both facts unchanged
 to the launched protocol through its prompt and environment.
 It does not interpret those facts into VCS commands or approval rules.
-The concrete semantics and mechanics live in each FirstMate's own home;
+The concrete Git semantics and mechanics live in Firstmate;
 [docs/19](19-firstmate-responsibilities.md) indexes their owners.
 
 ## Generated documentation before commit
 
-This repository installs `.githooks/pre-commit` through the root `prepare`
-script. The hook loads the Node version pinned by `.nvmrc` through `nvm use`, then
-runs `pnpm docs:generate` on every commit. If generation changes
-anything under `docs/generated`, the commit stops so the author can review and
-stage the result before retrying. It never stages files silently. CI then runs
-`pnpm docs:check` as the independent clean-checkout gate.
+The root `prepare` script installs `.githooks/pre-commit`.
+The hook selects the Node version pinned by `.nvmrc` and runs `pnpm docs:generate`.
+If generation changes `docs/generated`, the commit stops so the author can review and stage the result.
+CI independently runs `pnpm docs:check`.
 
-## Don't clobber a shared working tree
+## Do not clobber a shared working tree
 
-Panda runs several Claude sessions against the same `dev/pandamate` checkout, so
-another session's half-finished work routinely shows up in your files mid-task.
-Never commit the whole tree — you would push a sibling's unfinished change and can
-leave `main` not typechecking. Work in a worktree, or commit only your own hunks;
-when the tree is visibly shared, ask before committing.
+Several sessions may share `dev/pandamate`.
+Use an isolated worktree and preserve unrelated changes.
+Never commit the whole shared tree.
 
-## Reaching / restarting the real daemon (TMPDIR gotcha)
+## Reaching the real daemon
 
-The live daemon and the `Pandamate.app` home TUI talk over a Unix socket whose path
-derives from `tmpdir()`. The Claude Code harness runs a FirstMate shell with
-`TMPDIR=/tmp/claude-<uid>`, but the real daemon runs under the **system** TMPDIR
-(`/var/folders/6l/187kz4550gjdtd3l3lh3rjjctc50yb/T/`). So a plain `pandamate daemon
-status|stop|start` from a FirstMate hits the wrong socket and reports "not running"
-even when it is. Control the real daemon with the system TMPDIR:
+The live daemon and desktop launcher use the system temporary directory.
+Control it with the system `TMPDIR`, because agent shells may use a private temporary directory and therefore a different socket.
 
 ```bash
 REALT=/var/folders/6l/187kz4550gjdtd3l3lh3rjjctc50yb/T/
 TMPDIR=$REALT node apps/cli/src/main.ts daemon stop
-TMPDIR=$REALT node apps/cli/src/main.ts daemon start   # detached; runs source, so this is how code goes live
+TMPDIR=$REALT node apps/cli/src/main.ts daemon start
 ```
 
-`PANDAMATE_SOCKET_PATH` / `PANDAMATE_HOOK_SPOOL_DIR` injected into a FirstMate's env
-are decoys — `loadConfig` (`packages/config/src/index.ts`) does not read the socket
-path from them. **Restart is session-safe:** `stop()` never kills tmux sessions,
-and the real `claude-code` adapter takes an early "record running" return in
-`supervisor.ts`, so a `running/running` project (like the pandamate FirstMate
-itself) is not killed on reconcile.
+Stopping the daemon does not kill tmux sessions.
+Running projects remain available while supervision restarts.
 
-## The pnpm virtual store is hijackable from outside the repo (2026-07-29)
+## Dependency-store hygiene
 
-`~/.zshrc` used to export `NPM_CONFIG_STORE_DIR` / `NPM_CONFIG_CACHE_DIR` /
-`NPM_CONFIG_VIRTUAL_STORE_DIR` globally, pointing at `~/monomarket-external/…` —
-an Arc VFS workaround that monomarket needs and every other repo does not. So a
-`pnpm install` here put this workspace's virtual store in monomarket's shared
-directory; a later monomarket install pruned packages this repo still linked
-into, and the links dangled. The Home TUI then died instantly on `Cannot find
-package '@anthropic-ai/claude-agent-sdk'`, and the desktop launcher reported only
-"Home did not render in time".
-
-The exports are now scoped by a `chpwd` hook that sets them inside monomarket and
-unsets them everywhere else. Three things are still worth knowing:
-
-- **Env beats `.npmrc`.** A project `.npmrc` cannot defend against this — pnpm
-  ranks the environment above project config. Verified, not assumed.
-- **Shells started before the fix still carry the old values, and children
-  inherit them.** `pnpm store path` returning a `monomarket-external` path is the
-  tell. When in doubt, install with the vars explicitly cleared:
-  `env -u NPM_CONFIG_STORE_DIR -u NPM_CONFIG_CACHE_DIR -u NPM_CONFIG_VIRTUAL_STORE_DIR pnpm install`.
-- **The symptom is a dangling symlink, not a missing package**, so the lockfile
-  and `pnpm list` look fine. Check the links and the recorded store directly:
+Environment variables override `.npmrc`.
+Before installing, ensure `NPM_CONFIG_STORE_DIR`, `NPM_CONFIG_CACHE_DIR`, and `NPM_CONFIG_VIRTUAL_STORE_DIR` do not point outside this repository.
+Clear them explicitly when necessary.
 
 ```bash
-find node_modules packages/*/node_modules apps/*/node_modules \
-     spikes/*/node_modules fixtures/*/node_modules \
-     -maxdepth 2 -type l ! -exec test -e {} \; -print    # dangling links
-grep -n 'storeDir\|virtualStoreDir' node_modules/.modules.yaml
+env -u NPM_CONFIG_STORE_DIR -u NPM_CONFIG_CACHE_DIR -u NPM_CONFIG_VIRTUAL_STORE_DIR pnpm install
 ```
 
-`virtualStoreDir` should read `.pnpm`. Anything absolute and outside the repo
-means the next install will silently rot again.
+Check for dangling package links if the application fails despite a valid lockfile.
 
-## firstmate and gnhf are yours to keep current
+## Firstmate and gnhf
 
-Maintaining and developing **firstmate** and **gnhf** — all four checkouts, git and
-Arcadia copies alike — is a standing job (Panda, 2026-07-27). Keep an accurate,
-current picture; don't rediscover the layout each time. Confirm live state before
-advising or editing (which checkout, its remote, its branch, whether it is clean) —
-these move. The canonical topology lives in [CLAUDE.md](../CLAUDE.md) and
-[docs/16-firstmate-and-gnhf-topology.md](16-firstmate-and-gnhf-topology.md); when a
-change makes the topology wrong, fix it there in the same breath.
+The maintained Git repositories are `~/Yandex.Disk.localized/dev/firstmate` and `~/Yandex.Disk.localized/dev/gnhf`.
+Verify each repository's remote, branch, and cleanliness before advising or editing it.

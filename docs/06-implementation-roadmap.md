@@ -179,13 +179,13 @@ recovery, and attention scenarios.
 ## Phase 7 — real adapters
 
 **Status:** partial. Folder-first onboarding and shared supervisor launch paths
-exist for `FirstMateArc`, `FirstMateGit`, and `DocResearch`; existing sessions
+exist for `FirstMateGit` and `DocResearch`; existing sessions
 can be adopted. Formal adapter contracts, adapter-specific capability/recovery
 policies, and a complete real-project acceptance journey remain open.
 
 ### Build
 
-- FirstMateArc profile and Arcadia-specific validation;
+- FirstMateGit profile and Git-specific validation;
 - FirstMateGit profile;
 - DocResearch profile (`FirstMateDocs` compatibility alias);
 - adapter-specific capabilities and safe recovery;

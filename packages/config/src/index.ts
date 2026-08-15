@@ -14,17 +14,9 @@ export interface PandamateConfig {
   readonly memoryDirectory: string;
   readonly backupsDirectory: string;
   readonly tmuxSocketName: string | undefined;
-  readonly firstMateAdapter: "claude-code" | "fake";
+  readonly firstMateAdapter: "codex" | "claude-code" | "fake";
+  readonly codexExecutable: string;
   readonly claudeExecutable: string;
-  /**
-   * The arc FirstMate's own home — the directory holding its crew tooling and
-   * `bin/fm-watch`, e.g. `~/arcadia/junk/pandanax/firstmate`. An arc FirstMate's
-   * workspace is product code that carries no watcher of its own, so the
-   * supervisor falls back to this home to find one. `undefined` keeps the
-   * workspace-relative search as the only source, which is correct for git
-   * projects whose workspace already is the repository with the watcher.
-   */
-  readonly firstMateHome: string | undefined;
   readonly fakeFirstMateEntry: string | undefined;
   readonly reconcileIntervalMs: number;
   readonly heartbeatStaleMs: number;
@@ -73,25 +65,24 @@ export function loadConfig(
   ) {
     throw new Error("PANDAMATE_TMUX_SOCKET_NAME is invalid");
   }
-  const firstMateAdapter =
-    environment.PANDAMATE_FIRSTMATE_ADAPTER ?? "claude-code";
-  if (firstMateAdapter !== "claude-code" && firstMateAdapter !== "fake") {
+  const firstMateAdapter = environment.PANDAMATE_FIRSTMATE_ADAPTER ?? "codex";
+  if (
+    firstMateAdapter !== "codex" &&
+    firstMateAdapter !== "claude-code" &&
+    firstMateAdapter !== "fake"
+  ) {
     throw new Error("PANDAMATE_FIRSTMATE_ADAPTER is invalid");
   }
+  const codexExecutable = configuredPath(
+    environment.PANDAMATE_CODEX_EXECUTABLE,
+    join(homedir(), ".local", "bin", "codex"),
+    "PANDAMATE_CODEX_EXECUTABLE",
+  );
   const claudeExecutable = configuredPath(
     environment.PANDAMATE_CLAUDE_EXECUTABLE,
     join(homedir(), ".local", "bin", "claude"),
     "PANDAMATE_CLAUDE_EXECUTABLE",
   );
-  const firstMateHomeValue = environment.PANDAMATE_FIRSTMATE_HOME;
-  const firstMateHome =
-    firstMateHomeValue === undefined
-      ? undefined
-      : configuredPath(
-          firstMateHomeValue,
-          firstMateHomeValue,
-          "PANDAMATE_FIRSTMATE_HOME",
-        );
   const fakeFirstMateEntry = environment.PANDAMATE_FAKE_FIRSTMATE_ENTRY;
   if (
     fakeFirstMateEntry !== undefined &&
@@ -137,8 +128,8 @@ export function loadConfig(
     backupsDirectory: join(stateDirectory, "backups"),
     tmuxSocketName,
     firstMateAdapter,
+    codexExecutable,
     claudeExecutable,
-    firstMateHome,
     fakeFirstMateEntry,
     reconcileIntervalMs: boundedMilliseconds(
       "PANDAMATE_RECONCILE_INTERVAL_MS",
@@ -152,9 +143,8 @@ export function loadConfig(
       250,
       300_000,
     ),
-    // How long a full shutdown lets each FirstMate take over its own teardown —
-    // dismissing a crew and unmounting an Arcadia workspace is minutes of real
-    // work — before Pandamate stops what is left.
+    // How long a full shutdown lets each FirstMate take over its own teardown
+    // before Pandamate stops what is left.
     shutdownGraceMs: boundedMilliseconds(
       "PANDAMATE_SHUTDOWN_GRACE_MS",
       300_000,

@@ -42,9 +42,9 @@ Sources: `packages/protocol/src/index.ts`, `packages/domain/src/index.ts`, `spik
 
 | Vocabulary | Values |
 |---|---|
-| Project kinds | `arc`, `git`, `docs` |
+| Project kinds | `git`, `docs` |
 | Project merge modes | `auto`, `manual` |
-| FirstMate profiles | `FirstMateArc`, `FirstMateGit`, `DocResearch` |
+| FirstMate profiles | `FirstMateGit`, `DocResearch` |
 | Desired states | `running`, `stopped` |
 | Actual states | `registered`, `starting`, `running`, `working`, `waiting`, `failed`, `recovering`, `sleeping`, `stopped` |
 | Message priorities | `normal`, `high`, `urgent` |

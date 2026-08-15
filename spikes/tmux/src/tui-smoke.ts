@@ -125,7 +125,7 @@ try {
   );
   tmux.sendLiteralKey(tui, "j");
   await waitFor(
-    () => tmux.capturePane(tui).includes("SELECTED: ARC-1234"),
+    () => tmux.capturePane(tui).includes("SELECTED: GIT-1234"),
     "keyboard selection inside tmux",
   );
 

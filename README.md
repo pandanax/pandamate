@@ -1,7 +1,7 @@
 # Pandamate
 
-Pandamate is a local, durable control plane for long-running Claude Code
-orchestrators (“FirstMates”). It is the home screen through which Panda starts,
+Pandamate is a local, durable control plane for long-running Codex CLI or Claude
+Code orchestrators (“FirstMates”). Codex CLI is the default runtime. It is the home screen through which Panda starts,
 observes, directs, resumes, and opens project-level agents.
 
 The product is intentionally thin:
@@ -10,7 +10,7 @@ The product is intentionally thin:
 - A FirstMate owns the detailed work inside one project.
 - Workers spawned by a FirstMate remain invisible to Pandamate unless summarized
   by that FirstMate.
-- Claude context is disposable. Durable external state is authoritative.
+- Agent context is disposable. Durable external state is authoritative.
 
 ## Robot entry point
 
@@ -81,7 +81,7 @@ current implementation includes:
   drain`: supervision pauses and every project is durably marked stopped, so
   nothing is relaunched now and nothing returns by itself later), every
   `firstmate-*` session is then asked to shut itself down — crew dismissed,
-  worktrees released, Arcadia workspaces unmounted, its own session closed last
+  worktrees released, child processes stopped, its own session closed last
   — and Pandamate waits for each one, forcing only what outlasts
   `PANDAMATE_SHUTDOWN_GRACE_MS` (five minutes by default). The daemon stops next,
   and `pandamate:*` windows close last with `pandamate:home` at the very end,
@@ -99,18 +99,12 @@ current implementation includes:
   launch environment and in the session's tmux environment, so the Watcher and
   anything the FirstMate opens later agree on one session. Watchers armed by a
   FirstMate's own Stop hook and adopted sessions are left alone; see
-  [D-028](docs/08-decisions.md). An arc FirstMate whose workspace is product
-  code carries no watcher of its own — its `fm-watch` lives in the arc
-  FirstMate's separate home — so for `arc` projects the supervisor also looks in
-  that home, derived from the workspace's `.arc` root
-  (`<arcRoot>/junk/pandanax/firstmate`) with no configuration needed, when the
-  workspace declares none; `PANDAMATE_FIRSTMATE_HOME` optionally overrides the
-  derived path, and git projects, which own their watcher, are unaffected
-  ([D-031](docs/08-decisions.md)).
+  [D-028](docs/08-decisions.md). Git projects declare their Watcher inside the
+  repository; no external VCS-specific fallback is used.
 - `i` opens a real Pandamate writing surface. A folder path can be pasted or
   dragged there. Pandamate detects a configured FirstMate from project-local
-  Claude settings and repository markers, or accepts an explicit
-  `FirstMateArc`, `FirstMateGit`, or `DocResearch` profile, then registers and
+  Codex/AGENTS settings and Git repository markers, or accepts an explicit
+  `FirstMateGit` or `DocResearch` profile, then registers and
   starts the supervised project. Registered Fleet items show that profile.
 - Existing FirstMate workspaces contribute their watcher liveness beacon and
   latest bounded `*.status` line to the live TUI projection, so Selected shows a
@@ -163,7 +157,7 @@ exist yet.
 
 Phase 6 and 7 are also partial: the live OpenTUI has Home, Fleet, Project,
 Services, Event Journal, input/rename and lifecycle confirmation/progress
-surfaces; onboarding launches `FirstMateArc`, `FirstMateGit`, and `DocResearch`
+surfaces; onboarding launches `FirstMateGit` and `DocResearch`
 profiles through the shared supervisor. Conversation, Memory, Sessions, and
 Diagnostics screens and fully separate adapter contracts remain future work.
 Phase 8 has a deployable personal macOS launcher and full graceful shutdown, but
@@ -346,7 +340,6 @@ scripts/docs             generated-reference tooling
 13. [Phase 2 progress](docs/13-phase-2-progress.md)
 14. [Completion audit](docs/14-completion-audit.md)
 15. [Phase 3 progress](docs/15-phase-3-progress.md)
-16. [FirstMate and gnhf topology](docs/16-firstmate-and-gnhf-topology.md)
 17. [Full shutdown](docs/17-full-shutdown.md)
 18. [Agent operating notes](docs/18-agent-operations.md)
 19. [FirstMate responsibilities](docs/19-firstmate-responsibilities.md)

@@ -103,7 +103,7 @@ pnpm pandamate project create FirstMateGit /absolute/workspace
 ```
 
 The `i` key opens a writing surface with paste/drag support. Its deterministic
-creation parser accepts `FirstMateArc`, `FirstMateGit`, and `DocResearch`,
+creation parser accepts `FirstMateGit` and `DocResearch`,
 derives a bounded slug and title from the folder, registers the project, and
 requests `desired_state=running`. The supervisor injects the selected public
 profile, workspace, tmux session, Claude executable, and FirstMate identity into

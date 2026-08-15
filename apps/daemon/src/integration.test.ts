@@ -88,7 +88,7 @@ async function stopDaemon(
   await exited;
 }
 
-test("daemon restart preserves three projects and identical event history", async () => {
+test("daemon restart preserves projects and identical event history", async () => {
   const directory = mkdtempSync(join(tmpdir(), "pandamate-daemon-"));
   const environment = {
     ...process.env,
@@ -112,12 +112,6 @@ test("daemon restart preserves three projects and identical event history", asyn
         title: "Mandala",
         kind: "git" as const,
         workspace: "/workspace/mandala",
-      },
-      {
-        slug: "arc-1234",
-        title: "ARC-1234",
-        kind: "arc" as const,
-        workspace: "/workspace/arcadia",
       },
       {
         slug: "legal",
@@ -244,7 +238,7 @@ test("daemon restart preserves three projects and identical event history", asyn
     const events = (
       afterEvents as unknown as { readonly events: readonly unknown[] }
     ).events;
-    assert.equal(events.length, 6);
+    assert.equal(events.length, 5);
     await stopDaemon(child, config.socketPath);
   } finally {
     if (child.exitCode === null && child.signalCode === null) {

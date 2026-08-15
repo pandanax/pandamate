@@ -29,44 +29,29 @@ export function configuredFirstMateProfile(
   if (!statSync(submittedPath).isDirectory()) {
     throw new Error(`Workspace is not a directory: ${submittedPath}`);
   }
+  const submittedName = basename(submittedPath);
   const workspace =
-    basename(submittedPath) === ".claude"
+    submittedName === ".codex"
       ? dirname(submittedPath)
       : submittedPath;
-  const settingsPath = join(workspace, ".claude", "settings.json");
-  if (!existsSync(settingsPath)) {
+  const codexConfigPath = join(workspace, ".codex", "config.toml");
+  const agentsPath = join(workspace, "AGENTS.md");
+  const settingsPath = existsSync(codexConfigPath)
+    ? codexConfigPath
+    : existsSync(agentsPath)
+      ? agentsPath
+      : null;
+  if (!settingsPath) {
     throw new Error(
-      `No FirstMate configuration found in ${join(workspace, ".claude")}. Name a profile explicitly.`,
+      `No FirstMate configuration found in ${workspace}. Name a profile explicitly.`,
     );
   }
   const settingsText = readFileSync(settingsPath, "utf8");
-  let settings: unknown;
-  try {
-    settings = JSON.parse(settingsText);
-  } catch {
-    throw new Error(`Invalid Claude settings: ${settingsPath}`);
-  }
-  const settingsRecord =
-    typeof settings === "object" && settings !== null
-      ? (settings as Record<string, unknown>)
-      : {};
-  const environment =
-    typeof settingsRecord.env === "object" && settingsRecord.env !== null
-      ? (settingsRecord.env as Record<string, unknown>)
-      : {};
-  const hasFirstMateMarker =
-    typeof environment.FM_HOME === "string" ||
-    /firstmate|fm-[a-z]/i.test(settingsText);
+  const hasFirstMateMarker = /firstmate|FM_HOME|fm-[a-z]/i.test(settingsText);
   if (!hasFirstMateMarker) {
     throw new Error(
-      `Claude settings in ${workspace} do not identify a FirstMate. Name a profile explicitly.`,
+      `Agent settings in ${workspace} do not identify a FirstMate. Name a profile explicitly.`,
     );
-  }
-  if (
-    existsSync(join(workspace, ".arc")) ||
-    existsSync(join(workspace, "a.yaml"))
-  ) {
-    return { profile: "FirstMateArc", workspace };
   }
   if (existsSync(join(workspace, ".git"))) {
     return { profile: "FirstMateGit", workspace };

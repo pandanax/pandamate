@@ -7,7 +7,7 @@ from [README.md](README.md) for product state and the current handoff;
 ## How to operate here (read before acting)
 
 Common operating rules for every FirstMate — **code tasks are isolated in a
-worktree; project kind and merge mode are durable inputs to the selected
+Git worktree; project kind and merge mode are durable inputs to the selected
 FirstMate protocol**, don't clobber
 the shared working tree, how to reach/restart
 the real daemon, and the standing firstmate/gnhf mandate — live in
@@ -19,28 +19,5 @@ indexes which layer/home owns each capability.
 
 ## The projects Pandamate supervises
 
-firstmate and gnhf each exist **twice** — a git copy and an Arcadia copy — and
-confusing them wastes real work:
-
-| | git — `~/Yandex.Disk.localized/dev/` | arc — `~/arcadia/junk/pandanax/` |
-| --- | --- | --- |
-| **firstmate** | `dev/firstmate` → `github.com/pandanax/firstmate` | `junk/pandanax/firstmate` |
-| **gnhf** | `dev/gnhf` → `github.com/pandanax/gnhf` | `junk/pandanax/gnhf-arc` |
-
-The four traps, in short:
-
-- Typing `gnhf` runs the **arc** fork (`junk/pandanax/gnhf-arc`), never
-  `dev/gnhf`. It reaches it through an nvm symlink that any directory move
-  breaks.
-- The arc copies are `arc`, not git: no `origin`, branches publish as
-  `users/pandanax/<name>` (so never write that prefix yourself), and trunk
-  refuses direct pushes — changes land via `arc pr create`.
-- A shared arc worktree may host another agent. Check `arc status` before
-  switching branches, and commit path-limited.
-- Both git repos were moved off the `kunchenguid` upstream to `pandanax` forks;
-  `upstream` was removed on purpose, but `CHANGELOG.md` links still point
-  upstream on purpose too — they reference commits absent from our forks.
-
-Full detail, including the crew/store lifecycle and how to audit stale arc
-stores: [docs/16-firstmate-and-gnhf-topology.md](docs/16-firstmate-and-gnhf-topology.md).
-Verify the live state before acting on any of it; these paths have moved before.
+Pandamate supervises Git repositories and document workspaces.
+The maintained Firstmate and gnhf repositories live under `~/Yandex.Disk.localized/dev/` and use Git remotes under `github.com/pandanax/`.

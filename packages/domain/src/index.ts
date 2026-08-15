@@ -1,14 +1,13 @@
 import { createHash } from "node:crypto";
 import { basename, isAbsolute, normalize } from "node:path";
 
-export const projectKinds = ["arc", "git", "docs"] as const;
+export const projectKinds = ["git", "docs"] as const;
 export type ProjectKind = (typeof projectKinds)[number];
 
 export const mergeModes = ["auto", "manual"] as const;
 export type MergeMode = (typeof mergeModes)[number];
 
 export const firstMateProfiles = [
-  "FirstMateArc",
   "FirstMateGit",
   "DocResearch",
 ] as const;
@@ -480,7 +479,7 @@ export function validateCreateProjectInput(value: unknown): CreateProjectInput {
   }
   const input = value as Record<string, unknown>;
   if (!isProjectKind(input.kind)) {
-    throw new Error("Project kind must be arc, git, or docs");
+    throw new Error("Project kind must be git or docs");
   }
   const mergeMode = validateMergeMode(input.mergeMode ?? "manual");
   if (input.kind !== "git" && mergeMode !== "manual") {
@@ -506,8 +505,6 @@ export function projectKindForProfile(
   profile: FirstMateProfile,
 ): ProjectKind {
   switch (profile) {
-    case "FirstMateArc":
-      return "arc";
     case "FirstMateGit":
       return "git";
     case "DocResearch":
@@ -517,8 +514,6 @@ export function projectKindForProfile(
 
 export function profileForProjectKind(kind: ProjectKind): FirstMateProfile {
   switch (kind) {
-    case "arc":
-      return "FirstMateArc";
     case "git":
       return "FirstMateGit";
     case "docs":
@@ -531,9 +526,6 @@ export function validateFirstMateProfile(value: unknown): FirstMateProfile {
     throw new Error("FirstMate profile must be a string");
   }
   const normalized = value.toLowerCase().replaceAll(/[\s_-]/g, "");
-  if (normalized === "firstmatearc" || normalized === "arc") {
-    return "FirstMateArc";
-  }
   if (normalized === "firstmategit" || normalized === "git") {
     return "FirstMateGit";
   }
@@ -545,7 +537,7 @@ export function validateFirstMateProfile(value: unknown): FirstMateProfile {
     return "DocResearch";
   }
   throw new Error(
-    "Profile must be FirstMateArc, FirstMateGit, or DocResearch",
+    "Profile must be FirstMateGit or DocResearch",
   );
 }
 
@@ -593,11 +585,11 @@ export function parseProjectOnboardingText(text: unknown): ProjectOnboarding {
     throw new Error("Pandamate input must be 1-2048 characters");
   }
   const profileMatch = text.match(
-    /\b(firstmate[\s_-]*arc|firstmate[\s_-]*git|doc[\s_-]*research|firstmate[\s_-]*docs|arc|git|docs)\b/i,
+    /\b(firstmate[\s_-]*git|doc[\s_-]*research|firstmate[\s_-]*docs|git|docs)\b/i,
   );
   if (!profileMatch) {
     throw new Error(
-      "Name a profile: FirstMateArc, FirstMateGit, or DocResearch",
+      "Name a profile: FirstMateGit or DocResearch",
     );
   }
   const profile = validateFirstMateProfile(profileMatch[1]);
@@ -609,7 +601,7 @@ export function parseProjectOnboardingText(text: unknown): ProjectOnboarding {
       workspace = text
         .slice(pathStart)
         .replace(
-          /\s+(?:как|as)?\s*(?:firstmate[\s_-]*(?:arc|git|docs)|doc[\s_-]*research|arc|git|docs)\b.*$/i,
+          /\s+(?:как|as)?\s*(?:firstmate[\s_-]*(?:git|docs)|doc[\s_-]*research|git|docs)\b.*$/i,
           "",
         )
         .trim();
